@@ -11,6 +11,8 @@ import argparse
 
 from .arch import size_all
 from .model import compare, evaluate_all
+from .routes import ROUTES
+from .sensitivity import tornado
 from .waste_heat import heat_balance, offset_summary
 from .benefit import estimate as estimate_benefit
 
@@ -84,6 +86,45 @@ def _format_dominance(c, markdown: bool = False) -> str:
     fmt = "  ".join("{:<" + str(w) + "}" for w in widths)
     lines = [title, fmt.format(*header), fmt.format(*("-" * w for w in widths))]
     lines += [fmt.format(*r) for r in rows]
+    return "\n".join(lines)
+
+
+def _param_names() -> dict:
+    """Map each Param object (by id) to its module-level variable name."""
+    from . import params as P
+
+    from .params import Param
+
+    return {id(v): n for n, v in vars(P).items() if isinstance(v, Param)}
+
+
+def _format_sensitivity(route_key: str, markdown: bool = False) -> str:
+    rows = tornado(route_key)
+    names = _param_names()
+    title = (
+        f"One-at-a-time (tornado) sensitivity for '{route_key}': "
+        f"each param low/high, all others nominal (kWh/kg O2)"
+    )
+    header = ["Parameter", "Cite", "Low total", "High total", "Swing"]
+    table = []
+    for r in rows:
+        table.append([
+            names.get(id(r.param), "?"),
+            r.cite,
+            f"{r.low_total:.2f}",
+            f"{r.high_total:.2f}",
+            f"{r.swing:.2f}",
+        ])
+    if markdown:
+        out = [f"**{title}**", "",
+               "| " + " | ".join(header) + " |",
+               "|" + "|".join(["---"] * len(header)) + "|"]
+        out += ["| " + " | ".join(row) + " |" for row in table]
+        return "\n".join(out)
+    widths = [max(len(header[i]), *(len(row[i]) for row in table)) for i in range(len(header))]
+    fmt = "  ".join("{:<" + str(w) + "}" for w in widths)
+    lines = [title, fmt.format(*header), fmt.format(*("-" * w for w in widths))]
+    lines += [fmt.format(*row) for row in table]
     return "\n".join(lines)
 
 
@@ -169,7 +210,13 @@ def main(argv: list[str] | None = None) -> int:
                     help="compute waste-heat reject temperature (K) for --waste-heat")
     ap.add_argument("--benefit", action="store_true",
                     help="also print the cascade benefit + break-even probability analysis")
+    ap.add_argument("--sensitivity", metavar="ROUTE", choices=list(ROUTES),
+                    help="print the one-at-a-time (tornado) sensitivity table for ROUTE")
     args = ap.parse_args(argv)
+
+    if args.sensitivity:
+        print(_format_sensitivity(args.sensitivity, markdown=args.markdown))
+        return 0
 
     results = evaluate_all(n=args.n, seed=args.seed)
     print(_format_table(results, markdown=args.markdown))

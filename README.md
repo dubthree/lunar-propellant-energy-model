@@ -14,7 +14,10 @@ PNAS 2025: 24.3 ± 5.8 kWh/kg LOX for hydrogen reduction).
 
 ## Papers (each stands independently)
 
-- [`paper/PAPER.md`](paper/PAPER.md) — the core model, route rankings, and validation.
+- [`paper/MANUSCRIPT.md`](paper/MANUSCRIPT.md) — **draft submission manuscript**: abstract,
+  methods, two-anchor validation, sensitivity, findings, figures, references; leads with the
+  core model and folds in the companion analyses.
+- [`paper/PAPER.md`](paper/PAPER.md) — the core model technical note, route rankings, validation.
 - [`paper/WASTE-HEAT-OFFSET.md`](paper/WASTE-HEAT-OFFSET.md) — a quantified, Second-Law-safe
   case that compute/GPU waste heat can supply the *low-grade* thermal demand of PSR water
   mining (but not high-grade reduction heat). Backed by `lpem.waste_heat`.
@@ -59,9 +62,11 @@ python -m lpem --dominance    # + paired-MC P(cheapest)/P(worst) per route
 python -m lpem --plant-tonnes 50   # + power plant & landed-mass sizing per route
 python -m lpem --waste-heat   # + low-grade compute-waste-heat offset per route
 python -m lpem --benefit      # + cascade benefit & break-even probability
+python -m lpem --sensitivity mre   # tornado: which parameters drive a route's uncertainty
+python scripts/make_figures.py     # regenerate manuscript figures
 python -m lpem --figure results/comparison.png
 python -m lpem --markdown     # tables as Markdown
-pytest                        # 42 tests, including the Leger validation anchor
+pytest                        # 48 tests, including the Leger validation anchor
 ```
 
 ## How it is organized
@@ -75,6 +80,7 @@ pytest                        # 42 tests, including the Leger validation anchor
 | `src/lpem/arch.py` | architecture extension: power (kWe) + FSP landed mass for a target output |
 | `src/lpem/waste_heat.py` | low-grade compute-waste-heat offset (grade-matched), backs the waste-heat paper |
 | `src/lpem/benefit.py` | bidirectional benefit + break-even enabling probability for the cascade |
+| `src/lpem/sensitivity.py` | one-at-a-time tornado: which parameters drive each route's uncertainty |
 | `src/lpem/cli.py` | table / figure / markdown / plant-sizing / waste-heat output |
 | `tests/` | dimensional + conservation unit tests, route sanity, arch sizing, and the Leger validation |
 
