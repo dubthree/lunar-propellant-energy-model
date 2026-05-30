@@ -20,14 +20,16 @@ Full write-up and findings: [`paper/PAPER.md`](paper/PAPER.md).
 Route                         Yields   kWh/kg O2 (nom)  90% CI (O2)  kWh/kg propellant
 Carbothermal (CH4)            LOX      13.4             12.3-15.5    13.4
 PSR water mining              LOX+LH2  14.4             12.8-17.3    12.8
-Molten-salt (FFC Cambridge)   LOX      15.3             13.7-18.6    15.3
-Molten regolith electrolysis  LOX      21.9             17.9-29.0    21.9
+Molten-salt (FFC Cambridge)   LOX      15.3             12.2-21.6    15.3
+Molten regolith electrolysis  LOX      18.5             12.9-31.5    18.5
 H2 reduction (ilmenite)       LOX      24.6             16.9-27.6    24.6
 ```
 
 Paired Monte Carlo (which route is cheapest / worst, sharing parameters across routes):
-carbothermal is cheapest in 70% of trials; MRE and H2 reduction are the most expensive
-route in 63% / 36% (`python -m lpem --dominance`).
+carbothermal is cheapest in 58% of trials; H2 reduction and MRE are the most expensive
+route in 51% / 48% (`python -m lpem --dominance`). H2 reduction and MRE are now both
+anchored to independent literature (Leger 2025 + Taylor & Carrier 1993; Carr 1963 +
+terrestrial molten-oxide electrolysis).
 
 ![Route comparison](results/comparison.png)
 
@@ -36,9 +38,10 @@ common electrical basis; H2 reduction and MRE are the most intensive (MRE's "low
 reputation does not survive a realistic full-cell voltage); and the PSR water route's
 real value is that it uniquely yields fuel (LOX+LH2), not that it is lowest-energy.
 
-These v0.2 conclusions differ from v0.1, which an adversarial physics review corrected
-(optimistic liquefaction and near-thermodynamic electrolysis assumptions). The model is
-built to be moved by evidence.
+These conclusions differ from v0.1: an adversarial physics review (v0.2) and a
+molten-oxide-electrolysis literature review (v0.3) corrected optimistic assumptions and
+added independent anchors for the H2-reduction and MRE routes. The model is built to be
+moved by evidence; the git history shows it changing its mind.
 
 ## Install & run
 

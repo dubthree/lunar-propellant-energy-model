@@ -3,7 +3,7 @@
 **A reproducible, uncertainty-quantified model that puts five lunar oxygen /
 propellant extraction routes on one common electrical-energy basis.**
 
-Version 0.2 (2026-05-30). Source and data: this repository. Reproduce every number
+Version 0.3 (2026-05-30). Source and data: this repository. Reproduce every number
 with `python -m lpem`.
 
 ---
@@ -83,11 +83,26 @@ independent source (SOEC system efficiency ~0.67), not from Leger's implied ~0.5
 
 This is the project's falsifiable test (`tests/test_validation.py`): had the
 independent model landed far from Leger, the framework would be wrong. It does not.
-Honest caveats: (a) the Monte-Carlo *median* (≈21) sits below the nominal because the
-O2-yield prior is right-skewed, so we report both; (b) this validates only the one
-route with a published figure — the other four are first-principles estimates with no
-independent anchor, which is exactly why we report them with wide uncertainty and as
-probabilities rather than point claims (Section 5).
+The H2-reduction figure has a *second*, independent anchor: Taylor & Carrier (1993)
+put it at ~26 kWh/kg LOX (with a cross-technology range of 18–35), consistent with our
+24.6 and with Leger.
+
+**A second route is now anchored too.** Molten regolith electrolysis began as a pure
+first-principles estimate (no published kWh/kg). Its result (nominal 18.5, 90% CI
+[12.9, 31.5]) is corroborated by independent literature: Carr (1963) estimated ~26.4
+kWh/kg O2 for lunar MRE, and terrestrial molten-oxide electrolysis of iron (Allanore
+2015; Boston Metal) runs ~3.7–4.0 MWh/t metal ≈ 9 kWh/kg O2 as a well-insulated lower
+bound, with NASA reactor-sizing models (Schreiner 2016) placing whole-system figures at
+~50–120 kWh/kg O2 once Joule-heating and duty cycle are included. Our standalone-reactor
+estimate sits in the expected middle band. The current efficiency was also corrected to
+match *measured* regolith-surrogate MOE (70–90%, Ir anodes) rather than an optimistic
+guess (see git history, v0.2 → v0.3).
+
+Honest caveats: (a) the Monte-Carlo *median* can sit below the nominal because the
+O2-yield prior is right-skewed, so we report both; (b) the remaining routes (carbothermal,
+molten-salt, water) still rest on first-principles composition without a direct
+electrical anchor, which is why we report wide intervals and probabilities, not point
+claims (Section 5).
 
 ## 4. Results
 
@@ -97,8 +112,8 @@ probabilities rather than point claims (Section 5).
 |---|---|---|---|---|
 | Carbothermal (CH4) | LOX | 13.4 | 12.3–15.5 | 13.4 |
 | PSR water mining | LOX+LH2 | 14.4 | 12.8–17.3 | **12.8** |
-| Molten-salt (FFC Cambridge) | LOX | 15.3 | 13.7–18.6 | 15.3 |
-| Molten regolith electrolysis | LOX | 21.9 | 17.9–29.0 | 21.9 |
+| Molten-salt (FFC Cambridge) | LOX | 15.3 | 12.2–21.6 | 15.3 |
+| Molten regolith electrolysis | LOX | 18.5 | 12.9–31.5 | 18.5 |
 | H2 reduction (ilmenite) | LOX | 24.6 | 16.9–27.6 | 24.6 |
 
 The "nominal" column is the point estimate with every parameter at its cited value; it
@@ -118,14 +133,17 @@ each route is the cheapest or the most expensive (`python -m lpem --dominance`):
 
 | Route | P(cheapest) | P(worst) |
 |---|---|---|
-| Carbothermal (CH4) | 0.70 | 0.00 |
-| PSR water mining | 0.22 | 0.00 |
-| Molten-salt (FFC Cambridge) | 0.07 | 0.00 |
-| H2 reduction (ilmenite) | 0.00 | 0.36 |
-| Molten regolith electrolysis | 0.00 | 0.63 |
+| Carbothermal (CH4) | 0.58 | 0.00 |
+| Molten-salt (FFC Cambridge) | 0.22 | 0.00 |
+| PSR water mining | 0.19 | 0.00 |
+| Molten regolith electrolysis | 0.02 | 0.48 |
+| H2 reduction (ilmenite) | 0.00 | 0.51 |
 
 This is the honest basis for the findings below: it tells us which orderings the
-evidence supports and which are noise.
+evidence supports and which are noise. Carbothermal is the most likely cheapest (it
+beats H2 reduction in 100% of trials and MRE in ~90%); H2 reduction and MRE are the two
+most expensive in 99% of trials; molten-salt and the water route trade places for
+second-cheapest and are not separable.
 
 ## 5. Three findings
 
@@ -138,21 +156,22 @@ route in 70% of paired trials and beats hydrogen reduction and MRE essentially a
 electrical basis used by every other route, it comes out ahead. That is exactly the
 comparison the field could not make before.
 
-**Finding 2 — The two most energy-intensive routes are hydrogen reduction and MRE, for
-opposite structural reasons — and MRE's "low energy" reputation does not survive a
-realistic cell voltage.** Together these two are the most expensive route in 99% of
-trials. Hydrogen reduction (24.6) pays for heating ~50 kg of regolith per kg O2 at low
-ilmenite yield, plus a separate water-electrolysis step. Molten regolith electrolysis
-(21.9) is dominated by its Faradaic term: using a realistic *full* cell voltage (~3.5 V,
-which includes anode/concentration overpotential and ohmic drop through a poorly
-conducting oxide melt) and an oxide-melt current efficiency (~0.65, degraded by
-electronic conduction and Fe³⁺/Fe²⁺ shuttling), MRE is **not** energy-competitive.
-The common framing of MRE as low-energy comes from quoting near-thermodynamic voltages
-(~1.7 V); that does not hold at useful current density. MRE's case must rest on its
-metal co-product and on avoiding water electrolysis, not on energy. This finding is
-sensitive to the assumed cell voltage, which has no published lunar-regolith value;
-the wide CI [17.9, 29.0] reflects that, and pinning it down is the highest-value
-measurement this model identifies.
+**Finding 2 — The two most energy-intensive routes are hydrogen reduction and MRE, and
+MRE's apparent "low energy" depends entirely on which cell voltage you believe.**
+Together these two are the most expensive route in 99% of trials. Hydrogen reduction
+(24.6) pays for heating ~50 kg of regolith per kg O2 at low ilmenite yield, plus a
+separate water-electrolysis step; it is the *reliably* worst route (highest in ~half of
+trials, never cheap). Molten regolith electrolysis is the high-variance one: nominal
+18.5 but a 90% CI of [12.9, 31.5], because its Faradaic term depends on the full cell
+*decomposition* voltage, which is poorly constrained (~2.5–4 V plausibly, up to ~6 V).
+The persistent framing of MRE as low-energy comes from quoting near-thermodynamic
+voltages (~1.7 V) or conflating them with the much larger Joule-*heating* voltages
+(16–34 V) in concept papers; neither is the decomposition voltage at useful current
+density. With measured oxide-melt current efficiency (70–90%, corrected upward from an
+earlier pessimistic guess after this project's literature review), MRE is plausibly
+mid-pack but is the single worst route whenever its cell voltage runs high. Pinning down
+the MRE cell voltage with reactor data is the single highest-value measurement this model
+identifies — it is the difference between MRE being competitive and being worst.
 
 **Finding 3 — Per-kg-O2 scoring understates the only full-propellant route, but the
 advantage is narrow and boundary-dependent.** PSR water mining is the only route that
@@ -167,10 +186,11 @@ demo to date. The defensible claim is narrow: the water route's value is that it
 *closes the hydrogen loop*, not that it is lowest-energy.
 
 *(These conclusions differ from this project's v0.1, which ranked the water route
-cheapest and called MRE energy-competitive. Those results were artifacts of optimistic
-liquefaction and near-thermodynamic electrolysis assumptions; an adversarial physics
-review corrected the nominals, and the conclusions changed. The model is built to be
-moved by evidence — see the git history.)*
+cheapest and called MRE energy-competitive. Those were artifacts of optimistic
+liquefaction and near-thermodynamic electrolysis assumptions; a four-domain adversarial
+physics review (v0.2) and a molten-oxide-electrolysis literature review (v0.3) corrected
+the nominals and added independent anchors, and the conclusions changed. The model is
+built to be moved by evidence — see the git history.)*
 
 ## 5b. From energy to power plant and landed mass
 
@@ -186,8 +206,8 @@ Run with `python -m lpem --plant-tonnes 50`:
 |---|---|---|---|---|
 | Carbothermal | 85 | 79–105 | 19.2 | 0.9 |
 | PSR water mining | 91 | 83–117 | 20.5 | 0.9 |
-| Molten-salt (FFC) | 97 | 89–125 | 21.9 | 1.0 |
-| Molten regolith electrolysis | 139 | 117–194 | 31.2 | 1.4 |
+| Molten-salt (FFC) | 97 | 79–143 | 21.9 | 1.0 |
+| Molten regolith electrolysis | 117 | 84–209 | 26.4 | 1.2 |
 | H2 reduction (ilmenite) | 156 | 110–185 | 35.1 | 1.6 |
 
 Two consequences fall out. First, even a *small* 50 t/yr oxygen plant consumes one to
@@ -222,12 +242,13 @@ thermal management, comms, and margin outside this boundary (see below).
   shadowed resource. These are all one-signed (they raise energy), so the absolute kWh/kg
   figures are best read as *lower bounds*; the route *ranking* is more robust than the
   absolute levels because most omitted terms hit the already-expensive routes hardest.
-- **Triangular priors, sampled independently.** Ranges encode literature spread, not
-  formal measurement uncertainty. Parameters that are physically coupled (cell voltage
-  vs current efficiency; O2 yield vs reaction temperature) are drawn independently, which
-  can widen the tails of the electrochemical routes; treat MRE/molten-salt intervals as
-  indicative, not precise. The MRE/molten-salt figures are first-principles estimates
-  with no independent anchor, explicitly labeled, intended to be challenged.
+- **Triangular priors.** Ranges encode literature spread, not formal measurement
+  uncertainty. The electrolysis cell voltage and current efficiency are now sampled with
+  a physical anti-correlation (one shared "operating severity" latent: high current
+  density raises voltage and lowers efficiency together), which is why MRE's interval is
+  wide and bimodal-leaning rather than artificially narrow. O2 yield and reaction
+  temperature are still drawn independently (a residual idealization). The molten-salt
+  figure remains a first-principles estimate without a direct electrical anchor.
 - **Cell voltage and heat recuperation dominate** the MRE and regolith spreads
   respectively; both are the parameters most worth pinning down with reactor data.
 - **No site geography.** The power-resource geographic decoupling at the poles (the best
@@ -250,6 +271,10 @@ pytest                             # 29 tests incl. the Leger validation
 Parameters trace to the captured lunar-ISRU corpus; load-bearing figures:
 - Leger et al., PNAS 2025 — H2 reduction 24.3 ± 5.8 kWh/kg LOX, stage breakdown, water benchmark.
 - Sierra Space / NASA JSC CaRD — carbothermal thermal figure and yields.
+- Schreiner et al. 2016 (Adv. Space Res.) — lunar MRE reactor sizing model, whole-system kWh/kg O2.
+- Sibille/Dominguez (NASA NTRS 20120003037) — MRE decomposition vs Joule-heating voltage distinction.
+- Allanore 2015 (J. Electrochem. Soc.) — molten oxide electrolysis voltages, ~3.7 MWh/t Fe, current efficiency.
+- Carr 1963; Taylor & Carrier 1993 — independent historical anchors (MRE ~26.4; H2 reduction ~26 kWh/kg O2/LOX).
 - Blue Origin "Blue Alchemist", Lunar Resources, Helios — MRE temperatures and status.
 - Metalysis / FFC Cambridge — molten-salt voltages and O recovery.
 - Colaprete et al. 2010 (LCROSS) — PSR ice grade 5.6 ± 2.9 wt%.

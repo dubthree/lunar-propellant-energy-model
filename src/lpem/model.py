@@ -24,12 +24,26 @@ class Draw:
         # Key on the Param object itself (frozen dataclass => hashable). This keeps a
         # parameter referenced twice in one trial consistent, and is robust to derived
         # Params (unlike keying on id(), which breaks for locally-constructed objects).
-        self._cache: dict[Param, float] = {}
+        # Shared latents (for correlated params) are keyed by a ("__latent__", name) tuple.
+        self._cache: dict = {}
 
     def __call__(self, param: Param) -> float:
         if param not in self._cache:
             self._cache[param] = param.nominal if self.rng is None else param.sample(self.rng)
         return self._cache[param]
+
+    def latent(self, name: str) -> float:
+        """A shared standard-uniform latent in [0,1], memoized per trial by name.
+
+        Used to induce physical correlation between parameters that are not independent
+        (e.g. electrolysis cell voltage and current efficiency both move with operating
+        current density). Returns 0.5 on the nominal (rng-free) path so callers can keep
+        nominal behaviour exact.
+        """
+        key = ("__latent__", name)
+        if key not in self._cache:
+            self._cache[key] = 0.5 if self.rng is None else float(self.rng.random())
+        return self._cache[key]
 
 
 @dataclass

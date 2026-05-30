@@ -67,6 +67,25 @@ def water_electrolysis_kwh(efficiency: float) -> float:
     return C.H2_PER_KG_O2 * C.HHV_H2_KWH_PER_KG / efficiency
 
 
+def coupled_voltage_efficiency(draw, v_param, ce_param):
+    """Anti-correlated draw of (cell voltage, current efficiency) for an electrolysis cell.
+
+    Physically these are not independent: pushing higher current density raises the
+    operating voltage (more overpotential + iR) AND lowers Faradaic efficiency. So a
+    single shared "operating severity" latent maps high severity -> high voltage AND low
+    efficiency, and low severity -> low voltage AND high efficiency. This removes the
+    unphysical (low-V, low-eff) and (high-V, high-eff) corners that independent sampling
+    would otherwise visit. The nominal (rng-free) path returns each param's nominal
+    unchanged. On the sampled path, values are mapped linearly across each param's range.
+    """
+    if draw.rng is None:
+        return draw(v_param), draw(ce_param)
+    s = draw.latent("electrolysis_operating_severity")
+    v = v_param.low + s * (v_param.high - v_param.low)              # severity up -> V up
+    ce = ce_param.high - s * (ce_param.high - ce_param.low)         # severity up -> eff down
+    return v, ce
+
+
 def faradaic_kwh(v_cell: float, current_efficiency: float) -> float:
     """Faradaic electrolysis energy to evolve one kg O2 from oxide/salt melt.
 

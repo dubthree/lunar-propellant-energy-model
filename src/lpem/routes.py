@@ -90,7 +90,7 @@ def molten_regolith_electrolysis(draw) -> RouteResult:
             feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t,
             fusion_kj_per_kg=draw(P.FUSION_REGOLITH), melt_fraction=1.0,
         ),
-        "faradaic": S.faradaic_kwh(draw(P.V_CELL_MRE), draw(P.CURRENT_EFFICIENCY_OXIDE)),
+        "faradaic": S.faradaic_kwh(*S.coupled_voltage_efficiency(draw, P.V_CELL_MRE, P.CURRENT_EFFICIENCY_OXIDE)),
         "cleanup": draw(P.CLEANUP_KWH_PER_KG_O2),
         "compression": draw(P.COMPRESSION_KWH_PER_KG_O2),
         "liquefaction": S.liquefaction_kwh(1.0, draw(P.LIQUEFACTION_LOX)),
@@ -107,7 +107,7 @@ def molten_salt_electrolysis(draw) -> RouteResult:
         "excavation": S.excavation_kwh(feed, draw(P.EXCAVATION_KWH_PER_KG_REGOLITH)),
         # No regolith fusion: FFC operates below the regolith melting point.
         "heating": S.heating_kwh(feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t),
-        "faradaic": S.faradaic_kwh(draw(P.V_CELL_MOLTEN_SALT), draw(P.CURRENT_EFFICIENCY_SALT)),
+        "faradaic": S.faradaic_kwh(*S.coupled_voltage_efficiency(draw, P.V_CELL_MOLTEN_SALT, P.CURRENT_EFFICIENCY_SALT)),
         "cleanup": draw(P.CLEANUP_KWH_PER_KG_O2),
         "compression": draw(P.COMPRESSION_KWH_PER_KG_O2),
         "liquefaction": S.liquefaction_kwh(1.0, draw(P.LIQUEFACTION_LOX)),

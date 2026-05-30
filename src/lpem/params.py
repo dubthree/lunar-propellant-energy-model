@@ -80,10 +80,12 @@ ELECTROLYSIS_EFFICIENCY = Param(0.67, 0.60, 0.75, "SOEC system eff; Hauch 2020 /
 
 # Faradaic current efficiency (fraction of current that evolves O2 rather than driving
 # side reactions / re-dissolution). Split by system, because they differ physically:
-# - Oxide melt (MRE): iron-rich lunar melts have electronic conductivity and Fe3+/Fe2+
-#   shuttling that rob current, so a chloride-class 0.8-0.95 is not earned; ~0.65.
+# - Oxide melt (MRE): MEASURED lunar-regolith-surrogate MOE with Ir/Ir-W anodes ran
+#   ~70-90% and declined with time (Fe3+/Fe2+ shuttling, electronic conduction);
+#   Allanore 2015 assumes ~90% for terrestrial iron MOE. Nominal 0.80 (was 0.65, which
+#   was more pessimistic than the measured data).
 # - Chloride salt (FFC): cleaner, higher efficiency.
-CURRENT_EFFICIENCY_OXIDE = Param(0.65, 0.50, 0.80, "molten oxide; electronic conduction/shuttling")
+CURRENT_EFFICIENCY_OXIDE = Param(0.80, 0.70, 0.90, "measured Ir-anode regolith MOE 70-90%; Allanore 2015")
 CURRENT_EFFICIENCY_SALT = Param(0.75, 0.60, 0.90, "FFC molten chloride electrolysis")
 
 # Liquefaction specific energy (kWh per kg of liquid), electrical.
@@ -133,13 +135,14 @@ REACTION_ENTHALPY_H2_REDUCTION = Param(2.5, 1.0, 4.0, "ilmenite reduction net en
 # the Sabatier credit is allocated across the recycle loop.
 REACTION_ENTHALPY_CARBOTHERMAL = Param(3.0, 1.5, 5.0, "carbothermal net enthalpy, post-Sabatier credit")
 
-# Full operating cell voltage (V) = reversible decomposition potential + anode/cathode
+# Full operating DECOMPOSITION cell voltage (V) = reversible potential + anode/cathode
 # overpotential + concentration overpotential + ohmic (iR) drop, at the design current
-# density. NOT the thermodynamic floor (~1.2-1.7 V). Real MIT-lineage molten-oxide cells
-# run ~3-5 V once iR through the low-conductivity oxide melt is included, so the MRE
-# nominal is set to 3.5 V (a near-thermodynamic 2.5 V is not achievable at useful current
-# density). FFC molten chloride genuinely runs ~3.0 V.
-V_CELL_MRE = Param(3.5, 2.5, 5.0, "full MOE cell voltage incl. overpotential + iR")
+# density. NOT the thermodynamic floor (~1.5-2.3 V; Allanore 2015 Fig. 6). IMPORTANT:
+# this is distinct from the 16-34 V "applied voltages" in lunar MRE concept papers, which
+# are Joule-HEATING voltages to keep the melt molten, not decomposition voltages. Sibille
+# /Dominguez recorded electrochemical operation "below 10 V" (~6 V at 0.5 A/cm2). Nominal
+# 3.5 V (mid of the 2.5-4 V full-cell band), wide range to 6 V.
+V_CELL_MRE = Param(3.5, 2.2, 6.0, "MOE decomposition cell voltage; Sibille/Allanore")
 V_CELL_MOLTEN_SALT = Param(3.0, 2.6, 3.6, "FFC Cambridge full cell voltage")
 
 # --- Water route (PSR ice) ---
