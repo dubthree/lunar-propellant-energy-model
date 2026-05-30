@@ -6,3 +6,12 @@ __pycache__/
 build/
 dist/
 .venv/
+# LaTeX build artifacts (keep .tex and .pdf)
+paper/*.aux
+paper/*.log
+paper/*.bbl
+paper/*.blg
+paper/*.fls
+paper/*.fdb_latexmk
+paper/*.out
+paper/*.synctex.gz
