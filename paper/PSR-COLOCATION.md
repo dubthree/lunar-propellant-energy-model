@@ -54,6 +54,41 @@ and shares it, rather than two separate programs each solving permanent-shadow p
 independently. The compute load and the ISRU load are also complementary in time: compute
 is a steady baseload, ISRU can be throttled, which smooths the demand on a reactor.
 
+## Quantified benefit, and the probability it is realized
+
+The two benefits are distinct and should not be summed; conflating them oversells the
+cascade (`python -m lpem --benefit`, reference: a 50 t/yr PSR water plant + co-located
+compute):
+
+- **Cascade benefit** (reuse compute heat in ISRU): saves ~**2.7 t** of landed reactor
+  mass (the low-grade heat offset, avoided fission power), against ~**1 t** of
+  heat-integration hardware (exchanger, transport loop, dust mitigation).
+- **Siting benefit** (put the compute in the PSR for its cold sink): saves
+  radiator mass, scale-dependent — only ~0.3 t at the matched 12 kW, but **~25 t per MW**
+  of compute. At any real data-center scale this dwarfs the cascade and is the actual
+  driver of co-location. It is a *siting* benefit, not a cascade benefit: a PSR already
+  offers a cheap radiative sink, so the cascade does not save radiator mass.
+
+**Estimating the probability of the benefit.** Rather than assert subjective probabilities
+(P that lunar-surface compute exists, etc.), we compute the **break-even joint
+probability** the enabling chain must clear for the cascade hardware to pay for itself:
+P* = cost / benefit ≈ 1 t / 2.7 t ≈ **38%**. Two readings follow:
+
+- *Conditional on co-location already happening* (compute and a water plant both sited at
+  the PSR for their own reasons), the only remaining uncertainty is whether the heat
+  integration works, ~75% > 38% — so the cascade is a low-risk, positive-expected-value
+  add-on. **Design it in.**
+- *As a standalone speculative bet*, the full enabling chain (surface compute exists ×
+  co-located × water route pursued × integration works) under wide illustrative priors is
+  only ~9%, well below 38%, so its expected value is negative (~-0.8 t). **Do not justify
+  co-location by the cascade alone.**
+
+The decision structure is therefore clear: **co-location is justified (if at all) by the
+compute siting economics — ~25 t/MW of radiator mass and shared power-into-shadow
+infrastructure — and the ISRU heat cascade is a cheap, sensible bonus to capture once you
+are already there, not a reason to go.** The break-even model (`src/lpem/benefit.py`) makes
+every assumption explicit and tunable.
+
 ## What this is not, and what would sink it
 
 This is a siting argument, not an engineering design, and it rests on assumptions a

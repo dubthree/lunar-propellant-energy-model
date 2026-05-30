@@ -58,9 +58,10 @@ python -m lpem                # energy comparison table
 python -m lpem --dominance    # + paired-MC P(cheapest)/P(worst) per route
 python -m lpem --plant-tonnes 50   # + power plant & landed-mass sizing per route
 python -m lpem --waste-heat   # + low-grade compute-waste-heat offset per route
+python -m lpem --benefit      # + cascade benefit & break-even probability
 python -m lpem --figure results/comparison.png
 python -m lpem --markdown     # tables as Markdown
-pytest                        # 36 tests, including the Leger validation anchor
+pytest                        # 41 tests, including the Leger validation anchor
 ```
 
 ## How it is organized
@@ -73,6 +74,7 @@ pytest                        # 36 tests, including the Leger validation anchor
 | `src/lpem/model.py` | nominal estimate + Monte-Carlo uncertainty engine |
 | `src/lpem/arch.py` | architecture extension: power (kWe) + FSP landed mass for a target output |
 | `src/lpem/waste_heat.py` | low-grade compute-waste-heat offset (grade-matched), backs the waste-heat paper |
+| `src/lpem/benefit.py` | bidirectional benefit + break-even enabling probability for the cascade |
 | `src/lpem/cli.py` | table / figure / markdown / plant-sizing / waste-heat output |
 | `tests/` | dimensional + conservation unit tests, route sanity, arch sizing, and the Leger validation |
 

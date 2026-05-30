@@ -12,6 +12,7 @@ import argparse
 from .arch import size_all
 from .model import compare, evaluate_all
 from .waste_heat import heat_balance, offset_summary
+from .benefit import estimate as estimate_benefit
 
 
 def _format_table(results: dict, markdown: bool = False) -> str:
@@ -103,6 +104,23 @@ def _format_waste_heat(t_reject: float, compute_kw: float, o2_t: float) -> str:
     return "\n".join(lines)
 
 
+def _format_benefit() -> str:
+    r = estimate_benefit()
+    return "\n".join([
+        "Compute/ISRU cascade benefit and break-even probability:",
+        f"  Cascade (reuse heat in ISRU): saves {r.cascade_benefit_t:.2f} t reactor, "
+        f"costs {r.integration_cost_t:.2f} t hardware",
+        f"    break-even enabling probability P* = {r.cascade_break_even_prob:.0%}; "
+        f"P(integration works | co-located) = {r.p_integration_given_colocation:.0%} "
+        f"=> worthwhile if co-located: {r.cascade_worthwhile_if_colocated}",
+        f"  Siting (PSR cold sink for compute): saves {r.radiator_saved_t_at_ref:.2f} t at "
+        f"the reference load, ~{r.radiator_saved_t_per_mw:.0f} t per MW of compute (the larger prize)",
+        f"  Standalone speculative view: full enabling chain ~{r.expected_joint_probability:.0%} "
+        f"(illustrative) < P*, so E[cascade net] = {r.expected_cascade_net_t:.2f} t "
+        "(not worth it unless co-location already happens for other reasons)",
+    ])
+
+
 def _write_figure(results: dict, path: str) -> None:
     import matplotlib
 
@@ -146,6 +164,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="also print the low-grade compute-waste-heat offset per route")
     ap.add_argument("--reject-k", type=float, default=350.0,
                     help="compute waste-heat reject temperature (K) for --waste-heat")
+    ap.add_argument("--benefit", action="store_true",
+                    help="also print the cascade benefit + break-even probability analysis")
     args = ap.parse_args(argv)
 
     results = evaluate_all(n=args.n, seed=args.seed)
@@ -162,6 +182,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.waste_heat:
         print()
         print(_format_waste_heat(args.reject_k, compute_kw=12.0, o2_t=50.0))
+    if args.benefit:
+        print()
+        print(_format_benefit())
     return 0
 
 
