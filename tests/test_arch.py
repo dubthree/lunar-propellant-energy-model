@@ -26,10 +26,10 @@ def test_power_matches_hand_calc():
 def test_higher_energy_route_needs_more_power_and_mass():
     sizings = size_all(50_000, n=2000)
     h2 = sizings["h2_reduction"]
-    mre = sizings["mre"]
-    # H2 reduction is more energy-intensive -> more power and more landed mass.
-    assert h2.power_kwe_nominal > mre.power_kwe_nominal
-    assert h2.mass_t_nominal > mre.mass_t_nominal
+    carbo = sizings["carbothermal"]
+    # H2 reduction is far more energy-intensive than carbothermal -> more power, mass.
+    assert h2.power_kwe_nominal > carbo.power_kwe_nominal
+    assert h2.mass_t_nominal > carbo.mass_t_nominal
 
 
 def test_fsp_unit_count_consistent():

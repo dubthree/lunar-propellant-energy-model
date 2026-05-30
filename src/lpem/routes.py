@@ -49,8 +49,12 @@ def h2_reduction(draw) -> RouteResult:
         "excavation": S.excavation_kwh(feed, draw(P.EXCAVATION_KWH_PER_KG_REGOLITH)),
         "heating": S.heating_kwh(feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t),
         "reaction": S.reaction_enthalpy_kwh(draw(P.REACTION_ENTHALPY_H2_REDUCTION)),
+        # H2 is recycled internally (FeTiO3 + H2 -> Fe + TiO2 + H2O; the water is split,
+        # H2 returns to the reduction loop). This stage is the electrolysis energy to
+        # liberate the O2; the route is LOX-only (no net H2 product).
         "water_electrolysis": S.water_electrolysis_kwh(draw(P.ELECTROLYSIS_EFFICIENCY)),
         "cleanup": draw(P.CLEANUP_KWH_PER_KG_O2),
+        "compression": draw(P.COMPRESSION_KWH_PER_KG_O2),
         "liquefaction": S.liquefaction_kwh(1.0, draw(P.LIQUEFACTION_LOX)),
     }
     return RouteResult("H2 reduction (ilmenite)", "LOX", b, h2_coproduct=0.0)
@@ -65,8 +69,11 @@ def carbothermal(draw) -> RouteResult:
         "excavation": S.excavation_kwh(feed, draw(P.EXCAVATION_KWH_PER_KG_REGOLITH)),
         "heating": S.heating_kwh(feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t),
         "reaction": S.reaction_enthalpy_kwh(draw(P.REACTION_ENTHALPY_CARBOTHERMAL)),
+        # In the CH4-recycle flowsheet the liberated O ends up in water (methanation +
+        # reforming loop) which is electrolyzed; H2/CH4 are recycled, O2 is the product.
         "water_electrolysis": S.water_electrolysis_kwh(draw(P.ELECTROLYSIS_EFFICIENCY)),
         "cleanup": draw(P.CLEANUP_KWH_PER_KG_O2),
+        "compression": draw(P.COMPRESSION_KWH_PER_KG_O2),
         "liquefaction": S.liquefaction_kwh(1.0, draw(P.LIQUEFACTION_LOX)),
     }
     return RouteResult("Carbothermal (CH4)", "LOX", b, h2_coproduct=0.0)
@@ -83,8 +90,9 @@ def molten_regolith_electrolysis(draw) -> RouteResult:
             feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t,
             fusion_kj_per_kg=draw(P.FUSION_REGOLITH), melt_fraction=1.0,
         ),
-        "faradaic": S.faradaic_kwh(draw(P.V_CELL_MRE), draw(P.CURRENT_EFFICIENCY)),
+        "faradaic": S.faradaic_kwh(draw(P.V_CELL_MRE), draw(P.CURRENT_EFFICIENCY_OXIDE)),
         "cleanup": draw(P.CLEANUP_KWH_PER_KG_O2),
+        "compression": draw(P.COMPRESSION_KWH_PER_KG_O2),
         "liquefaction": S.liquefaction_kwh(1.0, draw(P.LIQUEFACTION_LOX)),
     }
     return RouteResult("Molten regolith electrolysis", "LOX", b, h2_coproduct=0.0)
@@ -99,8 +107,9 @@ def molten_salt_electrolysis(draw) -> RouteResult:
         "excavation": S.excavation_kwh(feed, draw(P.EXCAVATION_KWH_PER_KG_REGOLITH)),
         # No regolith fusion: FFC operates below the regolith melting point.
         "heating": S.heating_kwh(feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t),
-        "faradaic": S.faradaic_kwh(draw(P.V_CELL_MOLTEN_SALT), draw(P.CURRENT_EFFICIENCY)),
+        "faradaic": S.faradaic_kwh(draw(P.V_CELL_MOLTEN_SALT), draw(P.CURRENT_EFFICIENCY_SALT)),
         "cleanup": draw(P.CLEANUP_KWH_PER_KG_O2),
+        "compression": draw(P.COMPRESSION_KWH_PER_KG_O2),
         "liquefaction": S.liquefaction_kwh(1.0, draw(P.LIQUEFACTION_LOX)),
     }
     return RouteResult("Molten-salt (FFC Cambridge)", "LOX", b, h2_coproduct=0.0)
@@ -120,6 +129,7 @@ def water_mining(draw) -> RouteResult:
         ),
         "water_electrolysis": S.water_electrolysis_kwh(draw(P.ELECTROLYSIS_EFFICIENCY)),
         "cleanup": draw(P.CLEANUP_KWH_PER_KG_O2),
+        "compression": draw(P.COMPRESSION_KWH_PER_KG_O2),
         "liquefaction_lox": S.liquefaction_kwh(1.0, draw(P.LIQUEFACTION_LOX)),
         "liquefaction_lh2": S.liquefaction_kwh(C.H2_PER_KG_O2, draw(P.LIQUEFACTION_LH2)),
     }

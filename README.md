@@ -18,29 +18,38 @@ Full write-up and findings: [`paper/PAPER.md`](paper/PAPER.md).
 
 ```
 Route                         Yields   kWh/kg O2 (nom)  90% CI (O2)  kWh/kg propellant
-PSR water mining              LOX+LH2  11.4             10.7-12.4    10.1
-Carbothermal (CH4)            LOX      12.5             11.6-14.6    12.5
-Molten regolith electrolysis  LOX      13.2             11.8-18.0    13.2
-Molten-salt (FFC Cambridge)   LOX      14.0             12.4-17.2    14.0
-H2 reduction (ilmenite)       LOX      20.2             15.0-24.2    20.2
+Carbothermal (CH4)            LOX      13.4             12.3-15.5    13.4
+PSR water mining              LOX+LH2  14.4             12.8-17.3    12.8
+Molten-salt (FFC Cambridge)   LOX      15.3             13.7-18.6    15.3
+Molten regolith electrolysis  LOX      21.9             17.9-29.0    21.9
+H2 reduction (ilmenite)       LOX      24.6             16.9-27.6    24.6
 ```
+
+Paired Monte Carlo (which route is cheapest / worst, sharing parameters across routes):
+carbothermal is cheapest in 70% of trials; MRE and H2 reduction are the most expensive
+route in 63% / 36% (`python -m lpem --dominance`).
 
 ![Route comparison](results/comparison.png)
 
-**Headline:** the best-characterized route (H2 reduction, 20.2) is the most
-energy-intensive; the *unpublished* electrolysis routes (MRE, molten-salt) are
-energy-competitive (~13–14) and bounded by anode life, not energy; and per-kg-O2 scoring
-structurally understates the only full-propellant route (PSR water, 10.1/kg propellant).
+**Headline:** carbothermal is the most energy-efficient route once all routes are on a
+common electrical basis; H2 reduction and MRE are the most intensive (MRE's "low energy"
+reputation does not survive a realistic full-cell voltage); and the PSR water route's
+real value is that it uniquely yields fuel (LOX+LH2), not that it is lowest-energy.
+
+These v0.2 conclusions differ from v0.1, which an adversarial physics review corrected
+(optimistic liquefaction and near-thermodynamic electrolysis assumptions). The model is
+built to be moved by evidence.
 
 ## Install & run
 
 ```bash
 pip install -e .              # numpy only; matplotlib optional for figures
 python -m lpem                # energy comparison table
+python -m lpem --dominance    # + paired-MC P(cheapest)/P(worst) per route
 python -m lpem --plant-tonnes 50   # + power plant & landed-mass sizing per route
 python -m lpem --figure results/comparison.png
 python -m lpem --markdown     # tables as Markdown
-pytest                        # 27 tests, including the Leger validation anchor
+pytest                        # 29 tests, including the Leger validation anchor
 ```
 
 ## How it is organized

@@ -2,7 +2,7 @@
 
 import pytest
 
-from lpem import evaluate, evaluate_all
+from lpem import compare, evaluate, evaluate_all
 from lpem.routes import ROUTES
 
 
@@ -46,10 +46,34 @@ def test_water_route_per_propellant_lower_than_per_o2():
     assert w.per_propellant_nominal < w.nominal
 
 
-def test_mre_energy_competitive_despite_no_published_figure():
-    # Headline finding: MRE's per-kg-O2 energy is not an outlier high; its barrier
-    # is anode life/power density, not energy. Assert it is within the route spread.
-    results = evaluate_all(n=4000)
-    mre = results["mre"].nominal
-    h2 = results["h2_reduction"].nominal
-    assert mre < h2  # MRE more energy-efficient per kg O2 than H2 reduction at nominal
+def test_dominance_probabilities_are_valid():
+    c = compare(n=8000)
+    # P(cheapest) and P(worst) are probability simplexes over the routes.
+    assert pytest.approx(sum(c.p_cheapest.values()), abs=1e-9) == 1.0
+    assert pytest.approx(sum(c.p_worst.values()), abs=1e-9) == 1.0
+    # dominance is antisymmetric up to ties: P(a<b) + P(b<a) <= 1.
+    for a in c.keys:
+        for b in c.keys:
+            if a != b:
+                assert c.beats(a, b) + c.beats(b, a) <= 1.0 + 1e-9
+
+
+def test_carbothermal_is_robustly_cheapest():
+    # With all routes on a common electrical basis and realistic electrochemistry,
+    # carbothermal is the most likely cheapest route (paired Monte Carlo).
+    c = compare(n=8000)
+    assert c.p_cheapest["carbothermal"] == max(c.p_cheapest.values())
+    assert c.p_cheapest["carbothermal"] > 0.5
+    # and it beats H2 reduction and MRE essentially always.
+    assert c.beats("carbothermal", "h2_reduction") > 0.95
+    assert c.beats("carbothermal", "mre") > 0.95
+
+
+def test_mre_and_h2_reduction_are_the_two_most_intensive():
+    # Honest revised finding (v0.2): once MRE uses a realistic full-cell voltage, it is
+    # among the MOST energy-intensive routes, not competitive. The two worst routes are
+    # MRE and H2 reduction; carbothermal/molten-salt/water are essentially never worst.
+    c = compare(n=8000)
+    assert c.p_worst["mre"] + c.p_worst["h2_reduction"] > 0.95
+    for k in ("carbothermal", "molten_salt", "water_mining"):
+        assert c.p_worst[k] < 0.05

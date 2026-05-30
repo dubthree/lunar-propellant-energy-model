@@ -87,3 +87,52 @@ def evaluate(route_key: str, n: int = 20000, seed: int = 12345) -> MCResult:
 
 def evaluate_all(n: int = 20000, seed: int = 12345) -> dict[str, MCResult]:
     return {key: evaluate(key, n=n, seed=seed) for key in ROUTES}
+
+
+@dataclass
+class Comparison:
+    """Paired-Monte-Carlo comparison across all routes."""
+
+    keys: list                       # route keys, in declared order
+    names: dict                      # key -> display name
+    totals: dict                     # key -> np.ndarray of per-trial kWh/kg O2
+    dominance: dict                  # a -> {b -> P(route a strictly cheaper than b)}
+    p_cheapest: dict                 # key -> P(route is the single cheapest)
+    p_worst: dict                    # key -> P(route is the single most expensive)
+    n: int
+
+    def beats(self, a: str, b: str) -> float:
+        return self.dominance[a][b]
+
+
+def compare(n: int = 20000, seed: int = 12345) -> Comparison:
+    """Paired Monte Carlo: ONE shared Draw per trial across all routes.
+
+    This is the statistically correct way to rank the routes. Because a single Draw is
+    shared by every route within a trial, parameters that are physically common (regolith
+    cp, heat recuperation, electrolysis efficiency, liquefaction, cleanup, compression,
+    electric-to-thermal) take the SAME sampled value for all routes in that trial; only
+    route-specific parameters differ. Comparing independent per-route runs (as `evaluate`
+    does) would let one route get a lucky recuperation draw while another gets an unlucky
+    one, smearing the ranking. Here the ranking is evaluated trial-by-trial, so we can
+    report P(route A cheaper than route B) rather than eyeballing overlapping error bars.
+    """
+    keys = list(ROUTES)
+    rng = np.random.default_rng(seed)
+    totals = {k: np.empty(n) for k in keys}
+    for i in range(n):
+        draw = Draw(rng)  # shared across all routes this trial -> common params consistent
+        for k in keys:
+            totals[k][i] = ROUTES[k](draw).total
+
+    dominance = {
+        a: {b: float(np.mean(totals[a] < totals[b])) for b in keys if b != a} for a in keys
+    }
+    stacked = np.vstack([totals[k] for k in keys])  # (R, n)
+    cheapest = stacked.argmin(axis=0)
+    worst = stacked.argmax(axis=0)
+    p_cheapest = {k: float(np.mean(cheapest == j)) for j, k in enumerate(keys)}
+    p_worst = {k: float(np.mean(worst == j)) for j, k in enumerate(keys)}
+
+    names = {k: ROUTES[k](Draw(None)).name for k in keys}
+    return Comparison(keys, names, totals, dominance, p_cheapest, p_worst, n)

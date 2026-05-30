@@ -43,9 +43,10 @@ class Param:
 # ---------------------------------------------------------------------------
 
 # Regolith specific heat (kJ/kg/K). Rises with temperature (~0.8 at 200 K to ~1.4
-# near 1300 K); a constant mean with a wide range is used deliberately.
-# Source: Schreiner et al.; Hayne et al. 2017 lunar regolith thermophysical model.
-CP_REGOLITH = Param(1.0, 0.8, 1.3, "Hayne 2017 / Schreiner regolith cp")
+# near 1300 K); we use a constant mass-mean. Nominal 1.15 approximates the enthalpy
+# integral mean over the ~250->1300+ K range (a midpoint ~1.0 understates the high-dT
+# routes). Source: Schreiner et al.; Hayne et al. 2017 lunar regolith thermophysical model.
+CP_REGOLITH = Param(1.15, 0.9, 1.35, "enthalpy-mean over 250-1300 K; Hayne 2017 / Schreiner")
 
 # Latent heat of fusion of regolith/basalt (kJ/kg), for melt-based routes (MRE).
 FUSION_REGOLITH = Param(470.0, 350.0, 520.0, "basalt LoF; Ghiorso & Sack 1995, Navrotsky 2009")
@@ -61,12 +62,13 @@ T_FEED_PSR = Param(70.0, 40.0, 110.0, "PSR floor temps, Diviner (Hayne 2017)")
 # completeness. Source: Mueller, extraterrestrial excavation review.
 EXCAVATION_KWH_PER_KG_REGOLITH = Param(2.19e-5, 1.5e-5, 5.0e-5, "Mueller 79 J/kg drum")
 
-# Heat recuperation fraction: how much of the sensible heat in hot product/spent
-# feed is recovered to preheat incoming feed. Solid-solid recuperation is hard, so
-# the range is modest. This is one of the two dominant sensitivities.
-# Low end ~0.10 reflects early reactors with little heat recovery (the regime that
-# produces Leger 2025's reported right tail to ~53 kWh/kg LOX).
-RECUP_REGOLITH = Param(0.40, 0.10, 0.65, "engineering estimate, solid-solid HX")
+# Heat recuperation fraction: how much of the sensible heat in hot product/spent feed
+# is recovered to preheat incoming feed. Solid-solid recuperation in vacuum (no carrier
+# gas, no counterflow geometry, granular streams) is genuinely hard; terrestrial
+# gas-solid recuperators reach ~0.5-0.6 only with elaborate multistage contacting that
+# does not exist here. Nominal lowered to 0.25 to reflect that difficulty; this is one
+# of the two dominant sensitivities for the regolith routes.
+RECUP_REGOLITH = Param(0.25, 0.05, 0.55, "vacuum solid-solid HX; engineering estimate")
 RECUP_PSR = Param(0.20, 0.05, 0.40, "engineering estimate, regolith thermal mining")
 
 # Water electrolysis cell-plus-balance-of-plant efficiency (fraction of HHV). Set from
@@ -76,19 +78,32 @@ RECUP_PSR = Param(0.20, 0.05, 0.40, "engineering estimate, regolith thermal mini
 # a cross-check, not the input.)
 ELECTROLYSIS_EFFICIENCY = Param(0.67, 0.60, 0.75, "SOEC system eff; Hauch 2020 / IEA 2019")
 
-# Faradaic current efficiency for molten-oxide / molten-salt electrolysis (fraction
-# of current that goes to O2 evolution rather than side reactions / re-dissolution).
-CURRENT_EFFICIENCY = Param(0.80, 0.60, 0.95, "molten oxide electrolysis estimate")
+# Faradaic current efficiency (fraction of current that evolves O2 rather than driving
+# side reactions / re-dissolution). Split by system, because they differ physically:
+# - Oxide melt (MRE): iron-rich lunar melts have electronic conductivity and Fe3+/Fe2+
+#   shuttling that rob current, so a chloride-class 0.8-0.95 is not earned; ~0.65.
+# - Chloride salt (FFC): cleaner, higher efficiency.
+CURRENT_EFFICIENCY_OXIDE = Param(0.65, 0.50, 0.80, "molten oxide; electronic conduction/shuttling")
+CURRENT_EFFICIENCY_SALT = Param(0.75, 0.60, 0.90, "FFC molten chloride electrolysis")
 
 # Liquefaction specific energy (kWh per kg of liquid), electrical.
-# LOX at ~90 K: small-plant practical figure. LH2 at ~20 K: order-of-magnitude
-# harder (Carnot 7% vs 43%); terrestrial best ~6, typical 10-15. A lunar radiative
-# cold sink can help, hence the wide low end.
+# LOX at ~90 K: small-plant practical figure. LH2 at ~20 K: order-of-magnitude harder
+# (Carnot 7% vs 43%). The 6-15 kWh/kg often quoted is for LARGE terrestrial plants; at
+# lunar pilot throughput (single-digit t/yr, no LN2 precool infrastructure) small/lab
+# liquefiers run far worse (~25-60+), so the nominal is set to a small-scale value.
+# This figure bundles the ortho->para conversion load at 20 K (an LH2-specific cost not
+# modeled separately). A PSR radiative cold sink can help, hence the still-wide low end.
 LIQUEFACTION_LOX = Param(0.50, 0.20, 1.00, "small-scale O2 liquefier; NASA CFM/CryoFILL")
-LIQUEFACTION_LH2 = Param(10.0, 6.0, 15.0, "H2 liquefaction lit. range; Carnot-limited")
+LIQUEFACTION_LH2 = Param(30.0, 12.0, 60.0, "small-scale LH2 liquefier incl. ortho-para")
 
 # Generic product-gas / water cleanup (kWh per kg O2). Small.
 CLEANUP_KWH_PER_KG_O2 = Param(0.30, 0.10, 0.80, "drying/purification estimate")
+
+# Product-gas compression before liquefaction (kWh per kg O2). Reactor/electrolyzer
+# product comes off near or below 1 bar and must be compressed to the liquefier inlet;
+# isothermal-ish compression work, with real-stage inefficiency. Applies to every route
+# (the water route compresses both O2 and H2). Small but previously omitted.
+COMPRESSION_KWH_PER_KG_O2 = Param(0.30, 0.15, 0.70, "gas compression to liquefier inlet")
 
 # Electric-to-thermal efficiency: fraction of electrical input delivered as useful
 # heat to the feed (resistive heater with radiation/conduction losses). This is the
@@ -118,10 +133,14 @@ REACTION_ENTHALPY_H2_REDUCTION = Param(2.5, 1.0, 4.0, "ilmenite reduction net en
 # the Sabatier credit is allocated across the recycle loop.
 REACTION_ENTHALPY_CARBOTHERMAL = Param(3.0, 1.5, 5.0, "carbothermal net enthalpy, post-Sabatier credit")
 
-# Electrolysis cell voltage (V) for molten-oxide / molten-salt routes (drives the
-# Faradaic energy). MRE molten oxide ~2.5 V; FFC molten salt ~3.0 V.
-V_CELL_MRE = Param(2.5, 2.0, 3.5, "molten oxide electrolysis cell voltage")
-V_CELL_MOLTEN_SALT = Param(3.0, 2.6, 3.4, "FFC Cambridge cell voltage")
+# Full operating cell voltage (V) = reversible decomposition potential + anode/cathode
+# overpotential + concentration overpotential + ohmic (iR) drop, at the design current
+# density. NOT the thermodynamic floor (~1.2-1.7 V). Real MIT-lineage molten-oxide cells
+# run ~3-5 V once iR through the low-conductivity oxide melt is included, so the MRE
+# nominal is set to 3.5 V (a near-thermodynamic 2.5 V is not achievable at useful current
+# density). FFC molten chloride genuinely runs ~3.0 V.
+V_CELL_MRE = Param(3.5, 2.5, 5.0, "full MOE cell voltage incl. overpotential + iR")
+V_CELL_MOLTEN_SALT = Param(3.0, 2.6, 3.6, "FFC Cambridge full cell voltage")
 
 # --- Water route (PSR ice) ---
 # Ice grade: weight fraction water in mined icy regolith.

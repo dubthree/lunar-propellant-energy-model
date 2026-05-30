@@ -29,9 +29,14 @@ FSP_UNIT_KWE = 100.0  # NASA FY2030 fission-surface-power unit target
 # Plant operational availability (fraction of the year actually producing).
 AVAILABILITY = Param(0.90, 0.75, 0.95, "plant availability; FSP gives continuous power")
 # Power-system specific mass (kg per kWe), nuclear FSP incl. conversion + radiators.
-# NASA 40 kWe concept target ~150 kg/kWe, reportedly exceeded; range spans optimistic
-# to as-built-heavy. Source: NASA 40 kWe Fission Surface Power concept; Kilopower/FSP.
-FSP_SPECIFIC_MASS = Param(150.0, 120.0, 300.0, "NASA 40 kWe FSP ~150 kg/kWe target")
+# NASA's 40 kWe concept TARGETED ~150 kg/kWe but concept studies reportedly EXCEEDED it,
+# so 150 is an optimistic-unmet target; the nominal is set to a more defensible ~225,
+# with 150 as the low end. The landed-mass swing is most sensitive to this one number.
+# Source: NASA 40 kWe Fission Surface Power concept; Kilopower/FSP.
+# NOTE: this models an ALL-FISSION architecture (continuous power, no night-storage
+# mass). A solar+storage architecture would be dominated by regenerative-fuel-cell /
+# battery mass for the ~14-day night, which this does NOT include (see PAPER limitations).
+FSP_SPECIFIC_MASS = Param(225.0, 150.0, 350.0, "NASA FSP; 150 kg/kWe target reportedly exceeded")
 
 
 @dataclass

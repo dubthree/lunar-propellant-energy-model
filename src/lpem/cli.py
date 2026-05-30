@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 
 from .arch import size_all
-from .model import evaluate_all
+from .model import compare, evaluate_all
 
 
 def _format_table(results: dict, markdown: bool = False) -> str:
@@ -67,6 +67,24 @@ def _format_plant_table(sizings: dict, annual_o2_t: float, markdown: bool = Fals
     return "\n".join(lines)
 
 
+def _format_dominance(c, markdown: bool = False) -> str:
+    title = f"Paired-Monte-Carlo dominance ({c.n} trials): P(route is cheapest / worst)"
+    order = sorted(c.keys, key=lambda k: -c.p_cheapest[k])
+    rows = [[c.names[k], f"{c.p_cheapest[k]:.2f}", f"{c.p_worst[k]:.2f}"] for k in order]
+    header = ["Route", "P(cheapest)", "P(worst)"]
+    if markdown:
+        out = [f"**{title}**", "",
+               "| " + " | ".join(header) + " |",
+               "|" + "|".join(["---"] * len(header)) + "|"]
+        out += ["| " + " | ".join(r) + " |" for r in rows]
+        return "\n".join(out)
+    widths = [max(len(header[i]), *(len(r[i]) for r in rows)) for i in range(len(header))]
+    fmt = "  ".join("{:<" + str(w) + "}" for w in widths)
+    lines = [title, fmt.format(*header), fmt.format(*("-" * w for w in widths))]
+    lines += [fmt.format(*r) for r in rows]
+    return "\n".join(lines)
+
+
 def _write_figure(results: dict, path: str) -> None:
     import matplotlib
 
@@ -104,10 +122,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--figure", metavar="PATH", help="write a figure to PATH (needs matplotlib)")
     ap.add_argument("--plant-tonnes", type=float, metavar="T",
                     help="also size the power plant for T tonnes O2/yr per route")
+    ap.add_argument("--dominance", action="store_true",
+                    help="also print paired-Monte-Carlo dominance probabilities")
     args = ap.parse_args(argv)
 
     results = evaluate_all(n=args.n, seed=args.seed)
     print(_format_table(results, markdown=args.markdown))
+    if args.dominance:
+        print()
+        print(_format_dominance(compare(n=args.n, seed=args.seed), markdown=args.markdown))
     if args.figure:
         _write_figure(results, args.figure)
     if args.plant_tonnes:
