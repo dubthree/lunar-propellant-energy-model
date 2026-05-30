@@ -12,7 +12,14 @@ which-route-costs-least-energy comparison impossible. `lpem` fixes that, and val
 itself by independently reproducing the one clean published figure (Leger et al.,
 PNAS 2025: 24.3 ± 5.8 kWh/kg LOX for hydrogen reduction).
 
-Full write-up and findings: [`paper/PAPER.md`](paper/PAPER.md).
+## Papers (each stands independently)
+
+- [`paper/PAPER.md`](paper/PAPER.md) — the core model, route rankings, and validation.
+- [`paper/WASTE-HEAT-OFFSET.md`](paper/WASTE-HEAT-OFFSET.md) — a quantified, Second-Law-safe
+  case that compute/GPU waste heat can supply the *low-grade* thermal demand of PSR water
+  mining (but not high-grade reduction heat). Backed by `lpem.waste_heat`.
+- [`paper/PSR-COLOCATION.md`](paper/PSR-COLOCATION.md) — a separate, more speculative
+  architecture position: PSRs as a shared compute heat-rejection + water-resource hub.
 
 ## Results
 
@@ -50,9 +57,10 @@ pip install -e .              # numpy only; matplotlib optional for figures
 python -m lpem                # energy comparison table
 python -m lpem --dominance    # + paired-MC P(cheapest)/P(worst) per route
 python -m lpem --plant-tonnes 50   # + power plant & landed-mass sizing per route
+python -m lpem --waste-heat   # + low-grade compute-waste-heat offset per route
 python -m lpem --figure results/comparison.png
 python -m lpem --markdown     # tables as Markdown
-pytest                        # 29 tests, including the Leger validation anchor
+pytest                        # 36 tests, including the Leger validation anchor
 ```
 
 ## How it is organized
@@ -64,7 +72,8 @@ pytest                        # 29 tests, including the Leger validation anchor
 | `src/lpem/routes.py` | declarative route definitions composing the stages |
 | `src/lpem/model.py` | nominal estimate + Monte-Carlo uncertainty engine |
 | `src/lpem/arch.py` | architecture extension: power (kWe) + FSP landed mass for a target output |
-| `src/lpem/cli.py` | table / figure / markdown / plant-sizing output |
+| `src/lpem/waste_heat.py` | low-grade compute-waste-heat offset (grade-matched), backs the waste-heat paper |
+| `src/lpem/cli.py` | table / figure / markdown / plant-sizing / waste-heat output |
 | `tests/` | dimensional + conservation unit tests, route sanity, arch sizing, and the Leger validation |
 
 ## Scope

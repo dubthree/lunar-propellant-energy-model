@@ -11,6 +11,7 @@ import argparse
 
 from .arch import size_all
 from .model import compare, evaluate_all
+from .waste_heat import heat_balance, offset_summary
 
 
 def _format_table(results: dict, markdown: bool = False) -> str:
@@ -85,6 +86,23 @@ def _format_dominance(c, markdown: bool = False) -> str:
     return "\n".join(lines)
 
 
+def _format_waste_heat(t_reject: float, compute_kw: float, o2_t: float) -> str:
+    summ = offset_summary(t_reject_k=t_reject)
+    order = sorted(summ.values(), key=lambda r: -r.fraction_of_total)
+    lines = [f"Compute waste-heat offset at T_reject = {t_reject:.0f} K (low-grade only):",
+             f"  {'Route':30s} {'offset kWh/kg O2':>16s}  {'% of total':>10s}"]
+    for r in order:
+        lines.append(f"  {r.route:30s} {r.offsettable_kwh_per_kg_o2:16.2f}  {100*r.fraction_of_total:9.1f}%")
+    hb = heat_balance("water_mining", compute_kw, o2_t * 1000.0, t_reject_k=t_reject)
+    lines.append("")
+    lines.append(f"  Heat balance: a {compute_kw:g} kW compute load vs a {o2_t:g} t/yr PSR water plant")
+    lines.append(f"    low-grade demand {hb.low_grade_demand_kw:.1f} kW; covered {100*hb.covered_fraction:.0f}%; "
+                 f"reactor mass saved {hb.reactor_mass_saved_t:.1f} t")
+    lines.append(f"    that compute load alone could supply low-grade heat for "
+                 f"{hb.o2_supportable_kg_yr/1000:.0f} t O2/yr")
+    return "\n".join(lines)
+
+
 def _write_figure(results: dict, path: str) -> None:
     import matplotlib
 
@@ -124,6 +142,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="also size the power plant for T tonnes O2/yr per route")
     ap.add_argument("--dominance", action="store_true",
                     help="also print paired-Monte-Carlo dominance probabilities")
+    ap.add_argument("--waste-heat", action="store_true",
+                    help="also print the low-grade compute-waste-heat offset per route")
+    ap.add_argument("--reject-k", type=float, default=350.0,
+                    help="compute waste-heat reject temperature (K) for --waste-heat")
     args = ap.parse_args(argv)
 
     results = evaluate_all(n=args.n, seed=args.seed)
@@ -137,6 +159,9 @@ def main(argv: list[str] | None = None) -> int:
         sizings = size_all(args.plant_tonnes * 1000.0, n=args.n, seed=args.seed)
         print()
         print(_format_plant_table(sizings, args.plant_tonnes, markdown=args.markdown))
+    if args.waste_heat:
+        print()
+        print(_format_waste_heat(args.reject_k, compute_kw=12.0, o2_t=50.0))
     return 0
 
 
