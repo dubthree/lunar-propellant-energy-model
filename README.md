@@ -61,7 +61,7 @@ python -m lpem --waste-heat   # + low-grade compute-waste-heat offset per route
 python -m lpem --benefit      # + cascade benefit & break-even probability
 python -m lpem --figure results/comparison.png
 python -m lpem --markdown     # tables as Markdown
-pytest                        # 41 tests, including the Leger validation anchor
+pytest                        # 42 tests, including the Leger validation anchor
 ```
 
 ## How it is organized

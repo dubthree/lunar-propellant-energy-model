@@ -29,11 +29,21 @@ SIGMA = 5.670374e-8  # Stefan-Boltzmann, W/m^2/K^4
 
 # --- Compute / radiator parameters ---
 COMPUTE_KW = Param(12.0, 5.0, 50.0, "co-located surface compute load (kW); reference case")
-T_REJECT_K = Param(330.0, 315.0, 360.0, "compute coolant/radiator reject temperature")
-T_SINK_PSR_K = Param(70.0, 40.0, 110.0, "PSR effective radiative sink (cold, no solar)")
-T_SINK_EQ_K = Param(300.0, 270.0, 330.0, "sunlit-site effective sink (warm terrain + solar backload)")
-RADIATOR_EMISSIVITY = Param(0.90, 0.80, 0.95, "radiator emissivity")
+T_REJECT_K = Param(330.0, 315.0, 360.0, "compute coolant/radiator temperature")
+RADIATOR_EMISSIVITY = Param(0.85, 0.78, 0.92, "radiator IR emissivity (OSR/second-surface)")
 RADIATOR_AREAL_MASS = Param(7.0, 4.0, 12.0, "deployable radiator areal mass, kg/m^2")
+
+# Explicit radiator energy balance (replaces the opaque 'effective sink temperature').
+# Net rejection per m^2 = eps*sigma*(T_rad^4 - T_env^4) - absorbed_solar. The two sites
+# differ in the environmental IR temperature the radiator exchanges with, and in the
+# absorbed solar flux:
+# - PSR: permanent shadow (zero solar) and a cryogenic ~40-110 K terrain/sky.
+# - Sunlit equator: warm terrain IR (~250-350 K seen by a vertical/oriented panel) plus
+#   absorbed solar even for a sun-avoiding OSR coating (alpha~0.1 of the 1361 W/m^2
+#   constant times a geometric incidence factor); the band spans good vs poor orientation.
+T_ENV_PSR_K = Param(70.0, 40.0, 110.0, "PSR terrain/sky IR temperature")
+T_ENV_EQ_K = Param(300.0, 250.0, 350.0, "equatorial terrain IR seen by an oriented panel")
+ABSORBED_SOLAR_EQ_WM2 = Param(70.0, 25.0, 160.0, "absorbed solar on an oriented sunlit radiator (alpha*S*f)")
 
 # --- Heat-integration cost (the thing you must build to capture the benefit) ---
 INTEGRATION_MASS_T = Param(1.0, 0.4, 2.5, "heat exchanger + transport loop + dust mitigation, t")
@@ -51,10 +61,20 @@ P_WATER_ROUTE = Param(0.55, 0.25, 0.85, "PSR water mining pursued (vs regolith-o
 P_INTEGRATION_WORKS = Param(0.75, 0.50, 0.95, "heat transport/integration engineered | co-located")
 
 
-def radiator_area_m2(power_kw: float, t_reject: float, t_sink: float, emissivity: float) -> float:
-    """Radiator area to reject `power_kw` at `t_reject` to a sink at `t_sink`."""
-    denom = emissivity * SIGMA * (t_reject**4 - t_sink**4)
-    return (power_kw * 1000.0) / denom
+def net_rejection_wm2(t_rad: float, t_env: float, emissivity: float, absorbed_solar_wm2: float) -> float:
+    """Net heat a radiator panel rejects per m^2: IR emission minus environmental IR
+    minus absorbed solar. Can be <= 0 if the environment is too hot / sunlit to reject at
+    this radiator temperature (then the panel cannot reject there without active cooling)."""
+    return emissivity * SIGMA * (t_rad**4 - t_env**4) - absorbed_solar_wm2
+
+
+def radiator_area_m2(power_kw: float, t_rad: float, t_env: float,
+                     emissivity: float, absorbed_solar_wm2: float = 0.0) -> float:
+    """Radiator area to reject `power_kw` under an explicit energy balance."""
+    q = net_rejection_wm2(t_rad, t_env, emissivity, absorbed_solar_wm2)
+    if q <= 0:
+        return float("inf")  # cannot reject at this temperature in this environment
+    return (power_kw * 1000.0) / q
 
 
 @dataclass
@@ -65,9 +85,14 @@ class BenefitResult:
     cascade_break_even_prob: float      # P* = cost / benefit; enabling chain must beat this
     p_integration_given_colocation: float  # conditional prob the integration works | co-located
     cascade_worthwhile_if_colocated: bool   # is the cascade +EV once co-location is assumed?
-    # The separate SITING benefit (put compute in a PSR for its cold sink), scale-dependent:
-    radiator_saved_t_at_ref: float      # at the reference compute load
-    radiator_saved_t_per_mw: float      # scaling: ~t of radiator saved per MW of compute
+    # The separate SITING benefit (put compute in a PSR for its cold sink), scale-dependent.
+    # Per-MW radiator mass saved, with a Monte-Carlo band over the radiator energy balance:
+    radiator_saved_t_per_mw_nominal: float
+    radiator_saved_t_per_mw_median: float
+    radiator_saved_t_per_mw_p5: float
+    radiator_saved_t_per_mw_p95: float
+    frac_equatorial_infeasible: float   # fraction of sampled conditions where a sunlit
+                                        # radiator at T_rad cannot reject at all (q<=0)
     # The speculative UNCONDITIONAL view (full enabling chain, illustrative priors):
     expected_joint_probability: float
     expected_cascade_net_t: float       # E[chain] * cascade_benefit - cost
@@ -77,12 +102,16 @@ def _nominal(p: Param) -> float:
     return p.nominal
 
 
-def _radiator_saved_t(power_kw: float) -> float:
-    eps = _nominal(RADIATOR_EMISSIVITY)
-    tr = _nominal(T_REJECT_K)
-    a_eq = radiator_area_m2(power_kw, tr, _nominal(T_SINK_EQ_K), eps)
-    a_psr = radiator_area_m2(power_kw, tr, _nominal(T_SINK_PSR_K), eps)
-    return max(0.0, a_eq - a_psr) * _nominal(RADIATOR_AREAL_MASS) / 1000.0
+def _radiator_saved_t_per_mw(eps, t_rad, t_env_eq, solar_eq, t_env_psr, areal_mass) -> float:
+    """Radiator mass saved (t) per MW of compute by siting in a PSR vs the sunlit equator."""
+    a_eq = radiator_area_m2(1000.0, t_rad, t_env_eq, eps, solar_eq)
+    a_psr = radiator_area_m2(1000.0, t_rad, t_env_psr, eps, 0.0)
+    if a_eq == float("inf"):
+        # Equatorial panel cannot reject at this T_rad/environment at all: the PSR
+        # advantage is effectively unbounded; cap at the PSR area as a finite, conservative
+        # stand-in so the statistic stays usable.
+        a_eq = a_psr * 10.0
+    return max(0.0, a_eq - a_psr) * areal_mass / 1000.0
 
 
 def estimate(n: int = 20000, seed: int = 12345) -> BenefitResult:
@@ -104,12 +133,23 @@ def estimate(n: int = 20000, seed: int = 12345) -> BenefitResult:
     break_even = cost / cascade_benefit if cascade_benefit > 0 else float("inf")
     p_int = _nominal(P_INTEGRATION_WORKS)
 
-    # 2. Siting benefit: radiator mass saved (reference + per-MW scaling).
-    rad_ref = _radiator_saved_t(_nominal(COMPUTE_KW))
-    rad_per_mw = _radiator_saved_t(1000.0)
+    # 2. Siting benefit: radiator mass saved per MW, explicit energy balance + MC band.
+    rng = np.random.default_rng(seed)
+    rad_nominal = _radiator_saved_t_per_mw(
+        _nominal(RADIATOR_EMISSIVITY), _nominal(T_REJECT_K), _nominal(T_ENV_EQ_K),
+        _nominal(ABSORBED_SOLAR_EQ_WM2), _nominal(T_ENV_PSR_K), _nominal(RADIATOR_AREAL_MASS),
+    )
+    rad_samples = np.empty(n)
+    infeasible = 0
+    for i in range(n):
+        eps_s, tr_s = RADIATOR_EMISSIVITY.sample(rng), T_REJECT_K.sample(rng)
+        teq_s, sol_s = T_ENV_EQ_K.sample(rng), ABSORBED_SOLAR_EQ_WM2.sample(rng)
+        tpsr_s, am_s = T_ENV_PSR_K.sample(rng), RADIATOR_AREAL_MASS.sample(rng)
+        if net_rejection_wm2(tr_s, teq_s, eps_s, sol_s) <= 0:
+            infeasible += 1
+        rad_samples[i] = _radiator_saved_t_per_mw(eps_s, tr_s, teq_s, sol_s, tpsr_s, am_s)
 
     # 3. Unconditional speculative view: full enabling chain (illustrative priors).
-    rng = np.random.default_rng(seed)
     joint = np.ones(n)
     for p in (P_SURFACE_COMPUTE, P_COLOCATION, P_WATER_ROUTE, P_INTEGRATION_WORKS):
         joint *= rng.triangular(p.low, p.nominal, p.high, n)
@@ -121,8 +161,11 @@ def estimate(n: int = 20000, seed: int = 12345) -> BenefitResult:
         cascade_break_even_prob=break_even,
         p_integration_given_colocation=p_int,
         cascade_worthwhile_if_colocated=p_int > break_even,
-        radiator_saved_t_at_ref=rad_ref,
-        radiator_saved_t_per_mw=rad_per_mw,
+        radiator_saved_t_per_mw_nominal=rad_nominal,
+        radiator_saved_t_per_mw_median=float(np.percentile(rad_samples, 50)),
+        radiator_saved_t_per_mw_p5=float(np.percentile(rad_samples, 5)),
+        radiator_saved_t_per_mw_p95=float(np.percentile(rad_samples, 95)),
+        frac_equatorial_infeasible=infeasible / n,
         expected_joint_probability=expected_joint,
         expected_cascade_net_t=expected_joint * cascade_benefit - cost,
     )

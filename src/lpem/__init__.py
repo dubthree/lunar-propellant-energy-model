@@ -16,4 +16,4 @@ __all__ = [
     "offset_summary", "offsettable_kwh_per_kg_o2", "heat_balance",
     "estimate_benefit",
 ]
-__version__ = "0.5.0"
+__version__ = "0.6.0"

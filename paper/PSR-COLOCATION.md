@@ -63,11 +63,18 @@ compute):
 - **Cascade benefit** (reuse compute heat in ISRU): saves ~**2.7 t** of landed reactor
   mass (the low-grade heat offset, avoided fission power), against ~**1 t** of
   heat-integration hardware (exchanger, transport loop, dust mitigation).
-- **Siting benefit** (put the compute in the PSR for its cold sink): saves
-  radiator mass, scale-dependent — only ~0.3 t at the matched 12 kW, but **~25 t per MW**
-  of compute. At any real data-center scale this dwarfs the cascade and is the actual
-  driver of co-location. It is a *siting* benefit, not a cascade benefit: a PSR already
-  offers a cheap radiative sink, so the cascade does not save radiator mass.
+- **Siting benefit** (put the compute in the PSR for its cold sink): saves radiator mass,
+  scale-dependent. Under an explicit radiator energy balance (IR emission minus absorbed
+  solar minus environmental IR, not a lumped "effective sink temperature"), a PSR saves
+  **~50 t of radiator per MW of compute** (nominal 51, median 46, 90% CI ~11–290 t/MW; the
+  wide upper tail is the regime where a sunlit panel nears its rejection limit). Strikingly,
+  in **~18% of sampled conditions a sunlit radiator at 330 K cannot reject at all** without
+  a colder radiator or active cooling — an extreme form of the same PSR advantage. At any
+  real data-center scale this dwarfs the cascade and is the actual driver of co-location.
+  It is a *siting* benefit, not a cascade benefit: a PSR already offers a cheap radiative
+  sink, so the cascade itself does not save radiator mass. (Model: `src/lpem/benefit.py`,
+  `net_rejection_wm2`; parameters — emissivity, radiator temperature, absorbed solar,
+  environmental IR — are explicit and tunable.)
 
 **Estimating the probability of the benefit.** Rather than assert subjective probabilities
 (P that lunar-surface compute exists, etc.), we compute the **break-even joint

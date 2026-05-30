@@ -113,8 +113,11 @@ def _format_benefit() -> str:
         f"    break-even enabling probability P* = {r.cascade_break_even_prob:.0%}; "
         f"P(integration works | co-located) = {r.p_integration_given_colocation:.0%} "
         f"=> worthwhile if co-located: {r.cascade_worthwhile_if_colocated}",
-        f"  Siting (PSR cold sink for compute): saves {r.radiator_saved_t_at_ref:.2f} t at "
-        f"the reference load, ~{r.radiator_saved_t_per_mw:.0f} t per MW of compute (the larger prize)",
+        f"  Siting (PSR cold sink for compute): ~{r.radiator_saved_t_per_mw_nominal:.0f} t radiator "
+        f"saved per MW (median {r.radiator_saved_t_per_mw_median:.0f}, 90% CI "
+        f"{r.radiator_saved_t_per_mw_p5:.0f}-{r.radiator_saved_t_per_mw_p95:.0f}; explicit energy balance); "
+        f"a sunlit 330 K panel is infeasible in {r.frac_equatorial_infeasible:.0%} of sampled "
+        "conditions -- the larger prize and the real driver of co-location",
         f"  Standalone speculative view: full enabling chain ~{r.expected_joint_probability:.0%} "
         f"(illustrative) < P*, so E[cascade net] = {r.expected_cascade_net_t:.2f} t "
         "(not worth it unless co-location already happens for other reasons)",
