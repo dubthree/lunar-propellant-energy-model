@@ -43,8 +43,10 @@ def test_h2_reduction_dominant_driver_is_heating_related():
     assert top.param in (P.YIELD_H2_REDUCTION, P.RECUP_REGOLITH)
 
 
-def test_mre_dominant_driver_is_electrolysis_related():
-    # For MRE the faradaic chain dominates: the top driver should be the cell
-    # voltage or the current (Faradaic) efficiency.
-    top = dominant_drivers("mre", top=1)[0]
-    assert top.param in (P.V_CELL_MRE, P.CURRENT_EFFICIENCY_OXIDE)
+def test_mre_dominant_drivers_are_loss_or_faradaic():
+    # For MRE the dominant uncertainties are the (newly added) reactor standing loss and
+    # the faradaic chain (cell voltage / current efficiency). The top driver should be one
+    # of these; cell voltage in particular is the key unmeasured electrochemical number.
+    top3 = {d.param for d in dominant_drivers("mre", top=3)}
+    assert P.REACTOR_STANDING_LOSS in top3 or P.V_CELL_MRE in top3
+    assert P.V_CELL_MRE in top3

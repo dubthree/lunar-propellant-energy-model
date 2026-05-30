@@ -28,30 +28,32 @@ PNAS 2025: 24.3 ± 5.8 kWh/kg LOX for hydrogen reduction).
 
 ```
 Route                         Yields   kWh/kg O2 (nom)  90% CI (O2)  kWh/kg propellant
-Carbothermal (CH4)            LOX      13.4             12.3-15.5    13.4
-PSR water mining              LOX+LH2  14.4             12.8-17.3    12.8
-Molten-salt (FFC Cambridge)   LOX      15.3             12.2-21.6    15.3
-Molten regolith electrolysis  LOX      18.5             12.9-31.5    18.5
-H2 reduction (ilmenite)       LOX      24.6             16.9-27.6    24.6
+PSR water mining              LOX+LH2  14.0             11.8-16.4    12.5
+Carbothermal (CH4)            LOX      21.1             16.1-33.1    21.1
+Molten-salt (FFC Cambridge)   LOX      23.3             17.9-36.2    23.3
+H2 reduction (ilmenite)       LOX      24.3             16.4-27.1    24.3
+Molten regolith electrolysis  LOX      26.5             20.1-42.0    26.5
 ```
 
-Paired Monte Carlo (which route is cheapest / worst, sharing parameters across routes):
-carbothermal is cheapest in 58% of trials; H2 reduction and MRE are the most expensive
-route in 51% / 48% (`python -m lpem --dominance`). H2 reduction and MRE are now both
-anchored to independent literature (Leger 2025 + Taylor & Carrier 1993; Carr 1963 +
-terrestrial molten-oxide electrolysis).
+Paired Monte Carlo (`python -m lpem --dominance`): the PSR water route is cheapest in 99%
+of trials; MRE is the most likely worst. The water route wins because it is the only
+low-temperature route (sublimation ~273 K), so it alone escapes the continuous reactor
+heat-loss penalty (grounded in the NASA CaRD carbothermal datum, ~63-93 kWh-thermal/kg O2)
+that burdens every high-temperature route. H2 reduction matches Leger 2025 (24.3); the
+high-temperature routes cluster with wide, overlapping uncertainty and are not separable.
 
 ![Route comparison](results/comparison.png)
 
-**Headline:** carbothermal is the most energy-efficient route once all routes are on a
-common electrical basis; H2 reduction and MRE are the most intensive (MRE's "low energy"
-reputation does not survive a realistic full-cell voltage); and the PSR water route's
-real value is that it uniquely yields fuel (LOX+LH2), not that it is lowest-energy.
+**Headline:** the PSR water route is both the most energy-efficient (cheapest in 99% of
+trials) and the only full-propellant route, because it is the only low-temperature route
+and so avoids the reactor heat-loss penalty that burdens every high-temperature route.
 
-These conclusions differ from v0.1: an adversarial physics review (v0.2) and a
-molten-oxide-electrolysis literature review (v0.3) corrected optimistic assumptions and
-added independent anchors for the H2-reduction and MRE routes. The model is built to be
-moved by evidence; the git history shows it changing its mind.
+These conclusions are the product of repeated adversarial hardening (the git history shows
+the model changing its mind): a 4-agent physics review (v0.2), a molten-oxide-electrolysis
+literature review (v0.3), and a five-domain weakness sweep (v0.9) that closed the
+carbothermal anchor gap with the NASA CaRD datum, added the reactor heat-loss term,
+fixed a Monte-Carlo sampling bug, and switched order-of-magnitude priors to log-uniform.
+The model is built to be moved by evidence, not to defend a prior conclusion.
 
 ## Install & run
 

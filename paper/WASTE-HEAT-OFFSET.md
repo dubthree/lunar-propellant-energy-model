@@ -1,3 +1,5 @@
+> **Note (v0.9):** This companion note predates the v0.9 reactor-heat-loss correction. Some numbers below are superseded; see `MANUSCRIPT.md` for the current model (the PSR water route is now the most energy-efficient, not carbothermal). The qualitative argument of this note still holds.
+
 # Compute Waste Heat as a Low-Grade Thermal Offset for Lunar ISRU
 
 **A quantified, thermodynamically-bounded case: data-center / GPU waste heat can supply

@@ -67,23 +67,24 @@ def water_electrolysis_kwh(efficiency: float) -> float:
     return C.H2_PER_KG_O2 * C.HHV_H2_KWH_PER_KG / efficiency
 
 
-def coupled_voltage_efficiency(draw, v_param, ce_param):
+def coupled_voltage_efficiency(draw, v_param, ce_param, latent_name):
     """Anti-correlated draw of (cell voltage, current efficiency) for an electrolysis cell.
 
     Physically these are not independent: pushing higher current density raises the
-    operating voltage (more overpotential + iR) AND lowers Faradaic efficiency. So a
-    single shared "operating severity" latent maps high severity -> high voltage AND low
-    efficiency, and low severity -> low voltage AND high efficiency. This removes the
-    unphysical (low-V, low-eff) and (high-V, high-eff) corners that independent sampling
-    would otherwise visit. The nominal (rng-free) path returns each param's nominal
-    unchanged. On the sampled path, values are mapped linearly across each param's range.
+    operating voltage (more overpotential + iR) AND lowers Faradaic efficiency. A single
+    shared "operating severity" latent s maps high severity -> high voltage AND low
+    efficiency, removing the unphysical (low-V, low-eff) and (high-V, high-eff) corners
+    that independent sampling would visit. The latent is mapped through each parameter's
+    triangular inverse-CDF (`ppf`), so the coupled draws still honor each parameter's MODE
+    and distribution shape (a linear map would discard the mode and bias the mean toward
+    the range midpoint). The latent name is route/cell specific so distinct cells (e.g. a
+    1900 K oxide melt vs a 1200 K chloride salt) are NOT spuriously correlated in the
+    paired Monte Carlo. The nominal (rng-free) path returns each param's nominal unchanged.
     """
     if draw.rng is None:
         return draw(v_param), draw(ce_param)
-    s = draw.latent("electrolysis_operating_severity")
-    v = v_param.low + s * (v_param.high - v_param.low)              # severity up -> V up
-    ce = ce_param.high - s * (ce_param.high - ce_param.low)         # severity up -> eff down
-    return v, ce
+    s = draw.latent(latent_name)
+    return v_param.ppf(s), ce_param.ppf(1.0 - s)  # severity up -> V up, efficiency down
 
 
 def faradaic_kwh(v_cell: float, current_efficiency: float) -> float:

@@ -49,6 +49,11 @@ def h2_reduction(draw) -> RouteResult:
         "excavation": S.excavation_kwh(feed, draw(P.EXCAVATION_KWH_PER_KG_REGOLITH)),
         "heating": S.heating_kwh(feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t),
         "reaction": S.reaction_enthalpy_kwh(draw(P.REACTION_ENTHALPY_H2_REDUCTION)),
+        # NOTE: no separate reactor_loss term here. Unlike the other thermochemical routes,
+        # H2 reduction is calibrated to Leger 2025, whose full-chain figure already reflects
+        # realistic reduction energy; adding a standing-loss term would double-count and
+        # break that validation. The standing-loss correction is applied only to the routes
+        # that lack an independent energy anchor (carbothermal, MRE, molten-salt).
         # H2 is recycled internally (FeTiO3 + H2 -> Fe + TiO2 + H2O; the water is split,
         # H2 returns to the reduction loop). This stage is the electrolysis energy to
         # liberate the O2; the route is LOX-only (no net H2 product).
@@ -69,6 +74,7 @@ def carbothermal(draw) -> RouteResult:
         "excavation": S.excavation_kwh(feed, draw(P.EXCAVATION_KWH_PER_KG_REGOLITH)),
         "heating": S.heating_kwh(feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t),
         "reaction": S.reaction_enthalpy_kwh(draw(P.REACTION_ENTHALPY_CARBOTHERMAL)),
+        "reactor_loss": draw(P.REACTOR_STANDING_LOSS),
         # In the CH4-recycle flowsheet the liberated O ends up in water (methanation +
         # reforming loop) which is electrolyzed; H2/CH4 are recycled, O2 is the product.
         "water_electrolysis": S.water_electrolysis_kwh(draw(P.ELECTROLYSIS_EFFICIENCY)),
@@ -90,7 +96,9 @@ def molten_regolith_electrolysis(draw) -> RouteResult:
             feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t,
             fusion_kj_per_kg=draw(P.FUSION_REGOLITH), melt_fraction=1.0,
         ),
-        "faradaic": S.faradaic_kwh(*S.coupled_voltage_efficiency(draw, P.V_CELL_MRE, P.CURRENT_EFFICIENCY_OXIDE)),
+        "reactor_loss": draw(P.REACTOR_STANDING_LOSS),
+        "faradaic": S.faradaic_kwh(*S.coupled_voltage_efficiency(
+            draw, P.V_CELL_MRE, P.CURRENT_EFFICIENCY_OXIDE, "severity_mre")),
         "cleanup": draw(P.CLEANUP_KWH_PER_KG_O2),
         "compression": draw(P.COMPRESSION_KWH_PER_KG_O2),
         "liquefaction": S.liquefaction_kwh(1.0, draw(P.LIQUEFACTION_LOX)),
@@ -107,7 +115,9 @@ def molten_salt_electrolysis(draw) -> RouteResult:
         "excavation": S.excavation_kwh(feed, draw(P.EXCAVATION_KWH_PER_KG_REGOLITH)),
         # No regolith fusion: FFC operates below the regolith melting point.
         "heating": S.heating_kwh(feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t),
-        "faradaic": S.faradaic_kwh(*S.coupled_voltage_efficiency(draw, P.V_CELL_MOLTEN_SALT, P.CURRENT_EFFICIENCY_SALT)),
+        "reactor_loss": draw(P.REACTOR_STANDING_LOSS),
+        "faradaic": S.faradaic_kwh(*S.coupled_voltage_efficiency(
+            draw, P.V_CELL_MOLTEN_SALT, P.CURRENT_EFFICIENCY_SALT, "severity_molten_salt")),
         "cleanup": draw(P.CLEANUP_KWH_PER_KG_O2),
         "compression": draw(P.COMPRESSION_KWH_PER_KG_O2),
         "liquefaction": S.liquefaction_kwh(1.0, draw(P.LIQUEFACTION_LOX)),

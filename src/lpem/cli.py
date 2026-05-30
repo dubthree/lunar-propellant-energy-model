@@ -151,13 +151,13 @@ def _format_benefit() -> str:
         "Compute/ISRU cascade benefit and break-even probability:",
         f"  Cascade (reuse heat in ISRU): saves {r.cascade_benefit_t:.2f} t reactor, "
         f"costs {r.integration_cost_t:.2f} t hardware",
-        f"    break-even enabling probability P* = {r.cascade_break_even_prob:.0%}; "
-        f"P(integration works | co-located) = {r.p_integration_given_colocation:.0%} "
-        f"=> worthwhile if co-located: {r.cascade_worthwhile_if_colocated}",
-        f"  Siting (PSR cold sink for compute): ~{r.radiator_saved_t_per_mw_nominal:.0f} t radiator "
-        f"saved per MW (median {r.radiator_saved_t_per_mw_median:.0f}, 90% CI "
-        f"{r.radiator_saved_t_per_mw_p5:.0f}-{r.radiator_saved_t_per_mw_p95:.0f}; explicit energy balance); "
-        f"a sunlit 330 K panel is infeasible in {r.frac_equatorial_infeasible:.0%} of sampled "
+        f"    break-even enabling probability P*: nominal {r.cascade_break_even_prob_nominal:.0%}, "
+        f"propagated median {r.cascade_break_even_prob_median:.0%}; "
+        f"P(worthwhile | co-located) = {r.prob_cascade_worthwhile_if_colocated:.0%}",
+        f"  Siting (PSR cold sink for compute): radiator saved per MW (feasible cases) "
+        f"median {r.radiator_saved_t_per_mw_median_feasible:.0f} t, IQR "
+        f"{r.radiator_saved_t_per_mw_p25_feasible:.0f}-{r.radiator_saved_t_per_mw_p75_feasible:.0f}; "
+        f"a sunlit 330 K panel cannot reject in {r.frac_equatorial_infeasible:.0%} of sampled "
         "conditions -- the larger prize and the real driver of co-location",
         f"  Standalone speculative view: full enabling chain ~{r.expected_joint_probability:.0%} "
         f"(illustrative) < P*, so E[cascade net] = {r.expected_cascade_net_t:.2f} t "

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from . import constants as C
 from . import params as P
 from . import stages as S
 from .arch import FSP_SPECIFIC_MASS, HOURS_PER_YEAR
@@ -61,17 +62,22 @@ def offsettable_kwh_per_kg_o2(route_key: str, t_reject_k: float, draw: Draw | No
         t_feed = d(P.T_FEED_PSR)
         t_sub = d(P.T_SUBLIMATION)
         recup = d(P.RECUP_PSR)
+        ice_grade = d(P.ICE_GRADE)
         if t_reject_k <= t_feed:
             return 0.0
-        full = S.thermal_mining_kwh(d(P.ICE_GRADE), cp, t_sub - t_feed, recup, e2t)
+        # Decompose the thermal-mining demand explicitly into (a) host-regolith sensible
+        # heat from t_feed up to the served temperature min(t_reject, t_sub), and (b) the
+        # water sublimation enthalpy, delivered AT t_sub. A heat source at t_reject can
+        # serve the sensible slice it reaches, plus the sublimation only once t_reject
+        # >= t_sub. This is continuous in the sensible part; the step at t_sub equals the
+        # sublimation enthalpy (a genuine latent-heat threshold, not an artifact).
+        regolith_per_kg_o2 = ((1.0 - ice_grade) / ice_grade) * C.WATER_PER_KG_O2
+        served_dT = min(t_reject_k, t_sub) - t_feed
+        sensible = S.heating_kwh(regolith_per_kg_o2, cp, served_dT, recup, e2t)
+        sublimation = 0.0
         if t_reject_k >= t_sub:
-            return full  # source hot enough to drive the whole sublimation chain
-        # Partial: only the sensible regolith heating up to the reject temperature is
-        # served; the sublimation enthalpy (delivered at t_sub) is not.
-        sensible_full = S.thermal_mining_kwh(d(P.ICE_GRADE), cp, t_sub - t_feed, recup, e2t)
-        served_fraction = (t_reject_k - t_feed) / (t_sub - t_feed)
-        # Approximate: scale the sensible portion only. Sublimation enthalpy excluded.
-        return sensible_full * served_fraction * 0.5  # conservative; sublimation excluded
+            sublimation = (C.WATER_PER_KG_O2 * C.SUBLIMATION_H2O_KJ_PER_KG) / e2t / C.KJ_PER_KWH
+        return sensible + sublimation
 
     raise KeyError(route_key)
 

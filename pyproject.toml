@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lpem"
-version = "0.8.0"
+version = "0.9.0"
 description = "Common-basis electrical-energy model for lunar propellant production routes"
 authors = [{ name = "Walter Kueffer" }]
 readme = "README.md"

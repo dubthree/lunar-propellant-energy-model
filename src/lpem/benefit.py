@@ -22,6 +22,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .arch import FSP_SPECIFIC_MASS, HOURS_PER_YEAR
+from .model import Draw
 from .params import Param
 from .waste_heat import offsettable_kwh_per_kg_o2
 
@@ -82,17 +83,20 @@ class BenefitResult:
     # The cascade decision (build heat-integration hardware to reuse compute heat in ISRU):
     cascade_benefit_t: float            # ISRU reactor mass saved by the low-grade heat offset
     integration_cost_t: float           # mass of the heat-integration hardware
-    cascade_break_even_prob: float      # P* = cost / benefit; enabling chain must beat this
-    p_integration_given_colocation: float  # conditional prob the integration works | co-located
-    cascade_worthwhile_if_colocated: bool   # is the cascade +EV once co-location is assumed?
+    cascade_break_even_prob_nominal: float   # P* = cost/benefit at nominal
+    cascade_break_even_prob_median: float    # P* propagated (median of cost/benefit)
+    p_integration_given_colocation: float    # conditional prob the integration works | co-located
+    prob_cascade_worthwhile_if_colocated: float  # P( P_integration > P* ) propagating both
     # The separate SITING benefit (put compute in a PSR for its cold sink), scale-dependent.
-    # Per-MW radiator mass saved, with a Monte-Carlo band over the radiator energy balance:
+    # Per-MW radiator mass saved. Reported over FEASIBLE samples only (median + IQR), with
+    # the infeasibility fraction as a separate headline statistic; mean/p95 are NOT reported
+    # because they are dominated by the area-cap, not physics.
     radiator_saved_t_per_mw_nominal: float
-    radiator_saved_t_per_mw_median: float
-    radiator_saved_t_per_mw_p5: float
-    radiator_saved_t_per_mw_p95: float
+    radiator_saved_t_per_mw_median_feasible: float
+    radiator_saved_t_per_mw_p25_feasible: float
+    radiator_saved_t_per_mw_p75_feasible: float
     frac_equatorial_infeasible: float   # fraction of sampled conditions where a sunlit
-                                        # radiator at T_rad cannot reject at all (q<=0)
+                                        # radiator at T_rad cannot reject (cap binds / q<=0)
     # The speculative UNCONDITIONAL view (full enabling chain, illustrative priors):
     expected_joint_probability: float
     expected_cascade_net_t: float       # E[chain] * cascade_benefit - cost
@@ -102,16 +106,25 @@ def _nominal(p: Param) -> float:
     return p.nominal
 
 
-def _radiator_saved_t_per_mw(eps, t_rad, t_env_eq, solar_eq, t_env_psr, areal_mass) -> float:
-    """Radiator mass saved (t) per MW of compute by siting in a PSR vs the sunlit equator."""
+_A_EQ_CAP_MULT = 10.0  # cap the equatorial radiator area at this multiple of the PSR area
+
+
+def _radiator_saved_t_per_mw(eps, t_rad, t_env_eq, solar_eq, t_env_psr, areal_mass):
+    """Radiator mass saved (t) per MW by PSR siting, and whether the sunlit panel is feasible.
+
+    Returns (saved_t_per_mw, feasible). As a sunlit panel nears its rejection limit its
+    area diverges hyperbolically (1/q), so we cap a_eq at a fixed multiple of the PSR area
+    for ALL cases (not only the q<=0 branch); without this the saving is dominated by a
+    near-singular denominator and the upper percentiles become numerical artifacts. When the
+    cap binds (or the panel cannot reject at all) the case is flagged infeasible, and such
+    cases should be summarized by the feasibility fraction, not folded into a point estimate.
+    """
     a_eq = radiator_area_m2(1000.0, t_rad, t_env_eq, eps, solar_eq)
     a_psr = radiator_area_m2(1000.0, t_rad, t_env_psr, eps, 0.0)
-    if a_eq == float("inf"):
-        # Equatorial panel cannot reject at this T_rad/environment at all: the PSR
-        # advantage is effectively unbounded; cap at the PSR area as a finite, conservative
-        # stand-in so the statistic stays usable.
-        a_eq = a_psr * 10.0
-    return max(0.0, a_eq - a_psr) * areal_mass / 1000.0
+    cap = a_psr * _A_EQ_CAP_MULT
+    feasible = a_eq <= cap  # finite and below the cap
+    a_eq = min(a_eq, cap)
+    return max(0.0, a_eq - a_psr) * areal_mass / 1000.0, feasible
 
 
 def estimate(n: int = 20000, seed: int = 12345) -> BenefitResult:
@@ -125,29 +138,48 @@ def estimate(n: int = 20000, seed: int = 12345) -> BenefitResult:
        separate decision and scales with compute size; reported informationally. It is NOT
        a cascade benefit because a PSR already offers a cheap radiative sink.
     """
-    # 1. Cascade benefit: ISRU reactor mass saved.
-    offset_per_kg = offsettable_kwh_per_kg_o2("water_mining", _nominal(T_REJECT_K))
-    isru_kwe_saved = offset_per_kg * ANNUAL_O2_KG / HOURS_PER_YEAR
-    cascade_benefit = isru_kwe_saved * _nominal(FSP_SPECIFIC_MASS) / 1000.0
+    rng = np.random.default_rng(seed)
+
+    # 1. Cascade benefit: ISRU reactor mass saved (nominal), plus a propagated break-even.
+    def _benefit_t(draw):
+        offset = offsettable_kwh_per_kg_o2("water_mining", draw(T_REJECT_K), draw)
+        return offset * ANNUAL_O2_KG / HOURS_PER_YEAR * draw(FSP_SPECIFIC_MASS) / 1000.0
+
+    cascade_benefit = _benefit_t(Draw(None))
     cost = _nominal(INTEGRATION_MASS_T)
-    break_even = cost / cascade_benefit if cascade_benefit > 0 else float("inf")
+    break_even_nominal = cost / cascade_benefit if cascade_benefit > 0 else float("inf")
     p_int = _nominal(P_INTEGRATION_WORKS)
 
-    # 2. Siting benefit: radiator mass saved per MW, explicit energy balance + MC band.
-    rng = np.random.default_rng(seed)
-    rad_nominal = _radiator_saved_t_per_mw(
+    # Propagate the break-even: P* = cost/benefit is a ratio of uncertain quantities and is
+    # right-skewed, so the nominal point understates it. We report the median P* and the
+    # probability the cascade is worthwhile once co-located, P(P_integration > P*).
+    be_samples = np.empty(n)
+    worthwhile = np.empty(n, dtype=bool)
+    for i in range(n):
+        d = Draw(rng)
+        b = _benefit_t(d)
+        c = INTEGRATION_MASS_T.sample(rng)
+        pstar = c / b if b > 0 else float("inf")
+        be_samples[i] = pstar
+        worthwhile[i] = P_INTEGRATION_WORKS.sample(rng) > pstar
+
+    # 2. Siting benefit: radiator mass saved per MW; feasible-only robust stats.
+    rad_nominal, _ = _radiator_saved_t_per_mw(
         _nominal(RADIATOR_EMISSIVITY), _nominal(T_REJECT_K), _nominal(T_ENV_EQ_K),
         _nominal(ABSORBED_SOLAR_EQ_WM2), _nominal(T_ENV_PSR_K), _nominal(RADIATOR_AREAL_MASS),
     )
-    rad_samples = np.empty(n)
+    rad_feasible = []
     infeasible = 0
     for i in range(n):
-        eps_s, tr_s = RADIATOR_EMISSIVITY.sample(rng), T_REJECT_K.sample(rng)
-        teq_s, sol_s = T_ENV_EQ_K.sample(rng), ABSORBED_SOLAR_EQ_WM2.sample(rng)
-        tpsr_s, am_s = T_ENV_PSR_K.sample(rng), RADIATOR_AREAL_MASS.sample(rng)
-        if net_rejection_wm2(tr_s, teq_s, eps_s, sol_s) <= 0:
+        saved, feas = _radiator_saved_t_per_mw(
+            RADIATOR_EMISSIVITY.sample(rng), T_REJECT_K.sample(rng), T_ENV_EQ_K.sample(rng),
+            ABSORBED_SOLAR_EQ_WM2.sample(rng), T_ENV_PSR_K.sample(rng), RADIATOR_AREAL_MASS.sample(rng),
+        )
+        if feas:
+            rad_feasible.append(saved)
+        else:
             infeasible += 1
-        rad_samples[i] = _radiator_saved_t_per_mw(eps_s, tr_s, teq_s, sol_s, tpsr_s, am_s)
+    rad_feasible = np.array(rad_feasible) if rad_feasible else np.array([rad_nominal])
 
     # 3. Unconditional speculative view: full enabling chain (illustrative priors).
     joint = np.ones(n)
@@ -158,13 +190,14 @@ def estimate(n: int = 20000, seed: int = 12345) -> BenefitResult:
     return BenefitResult(
         cascade_benefit_t=cascade_benefit,
         integration_cost_t=cost,
-        cascade_break_even_prob=break_even,
+        cascade_break_even_prob_nominal=break_even_nominal,
+        cascade_break_even_prob_median=float(np.median(be_samples)),
         p_integration_given_colocation=p_int,
-        cascade_worthwhile_if_colocated=p_int > break_even,
+        prob_cascade_worthwhile_if_colocated=float(worthwhile.mean()),
         radiator_saved_t_per_mw_nominal=rad_nominal,
-        radiator_saved_t_per_mw_median=float(np.percentile(rad_samples, 50)),
-        radiator_saved_t_per_mw_p5=float(np.percentile(rad_samples, 5)),
-        radiator_saved_t_per_mw_p95=float(np.percentile(rad_samples, 95)),
+        radiator_saved_t_per_mw_median_feasible=float(np.percentile(rad_feasible, 50)),
+        radiator_saved_t_per_mw_p25_feasible=float(np.percentile(rad_feasible, 25)),
+        radiator_saved_t_per_mw_p75_feasible=float(np.percentile(rad_feasible, 75)),
         frac_equatorial_infeasible=infeasible / n,
         expected_joint_probability=expected_joint,
         expected_cascade_net_t=expected_joint * cascade_benefit - cost,

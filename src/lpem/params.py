@@ -12,17 +12,34 @@ literature*, not claiming Gaussian measurement error.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
+
+
+def _tri_ppf(u: float, a: float, c: float, b: float) -> float:
+    """Inverse CDF of a triangular(a, mode=c, b) distribution at u in [0, 1]."""
+    if b == a:
+        return a
+    fc = (c - a) / (b - a)
+    if u <= fc:
+        return a + math.sqrt(u * (b - a) * (c - a)) if c > a else a
+    return b - math.sqrt((1.0 - u) * (b - a) * (b - c)) if b > c else b
 
 
 @dataclass(frozen=True)
 class Param:
-    """A scalar with a triangular uncertainty range and a source note."""
+    """A scalar with a triangular uncertainty range and a source note.
+
+    If `log` is True the triangular distribution is taken in log-space (a log-triangular),
+    appropriate for order-of-magnitude quantities (e.g. small-scale liquefaction energy)
+    where a linear triangular would under-weight the upper decade.
+    """
 
     nominal: float
     low: float
     high: float
     cite: str = ""
+    log: bool = False
 
     def __post_init__(self) -> None:
         if not (self.low <= self.nominal <= self.high):
@@ -30,12 +47,25 @@ class Param:
                 f"Param requires low <= nominal <= high, got "
                 f"({self.low}, {self.nominal}, {self.high}) [{self.cite}]"
             )
+        if self.log and self.low <= 0:
+            raise ValueError(f"log Param requires low > 0 [{self.cite}]")
 
-    def sample(self, rng) -> float:
-        # numpy triangular(left, mode, right)
+    def ppf(self, u: float) -> float:
+        """Value at quantile u in [0, 1], honoring the mode (and log-space if set).
+
+        Used both for sampling and for correlated (shared-latent) draws, so that
+        coupled parameters still respect each parameter's mode and distribution shape.
+        """
         if self.low == self.high:
             return self.nominal
-        return float(rng.triangular(self.low, self.nominal, self.high))
+        if self.log:
+            return math.exp(_tri_ppf(u, math.log(self.low), math.log(self.nominal), math.log(self.high)))
+        return _tri_ppf(u, self.low, self.nominal, self.high)
+
+    def sample(self, rng) -> float:
+        if self.low == self.high:
+            return self.nominal
+        return float(self.ppf(rng.random()))
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +106,11 @@ RECUP_PSR = Param(0.20, 0.05, 0.40, "engineering estimate, regolith thermal mini
 # IEA Future of Hydrogen 2019: ~0.65-0.75 system level) so the H2-reduction total is
 # not fitted to Leger. (Leger's breakdown implies ~0.55 at the LOX-chain level; that is
 # a cross-check, not the input.)
-ELECTROLYSIS_EFFICIENCY = Param(0.67, 0.60, 0.75, "SOEC system eff; Hauch 2020 / IEA 2019")
+# HHV-basis: this is the electrical-to-H2 system efficiency on a higher-heating-value
+# basis (the basis the HHV numerator in stages.py uses), so the two are consistent. SOEC
+# stacks quote higher on an LHV/electrical basis (they import process heat); 0.70 HHV-system
+# is the defensible balance-of-plant figure. Source: Hauch 2020 / IEA 2019, HHV-adjusted.
+ELECTROLYSIS_EFFICIENCY = Param(0.70, 0.60, 0.85, "HHV-basis electrolysis system eff; Hauch 2020 / IEA 2019")
 
 # Faradaic current efficiency (fraction of current that evolves O2 rather than driving
 # side reactions / re-dissolution). Split by system, because they differ physically:
@@ -95,8 +129,10 @@ CURRENT_EFFICIENCY_SALT = Param(0.75, 0.60, 0.90, "FFC molten chloride electroly
 # liquefiers run far worse (~25-60+), so the nominal is set to a small-scale value.
 # This figure bundles the ortho->para conversion load at 20 K (an LH2-specific cost not
 # modeled separately). A PSR radiative cold sink can help, hence the still-wide low end.
-LIQUEFACTION_LOX = Param(0.50, 0.20, 1.00, "small-scale O2 liquefier; NASA CFM/CryoFILL")
-LIQUEFACTION_LH2 = Param(30.0, 12.0, 60.0, "small-scale LH2 liquefier incl. ortho-para")
+# Log-uniform (order-of-magnitude span): a linear triangular would under-weight the
+# upper decade for these "order of magnitude harder" cryogenic terms.
+LIQUEFACTION_LOX = Param(0.50, 0.20, 1.00, "small-scale O2 liquefier; NASA CFM/CryoFILL", log=True)
+LIQUEFACTION_LH2 = Param(30.0, 12.0, 60.0, "small-scale LH2 liquefier incl. ortho-para", log=True)
 
 # Generic product-gas / water cleanup (kWh per kg O2). Small.
 CLEANUP_KWH_PER_KG_O2 = Param(0.30, 0.10, 0.80, "drying/purification estimate")
@@ -113,6 +149,19 @@ COMPRESSION_KWH_PER_KG_O2 = Param(0.30, 0.15, 0.70, "gas compression to liquefie
 # basis: electrical = thermal_demand / ELECTRIC_TO_THERMAL_EFF. Solar-thermal heating
 # would be a separate sensitivity, not this baseline.
 ELECTRIC_TO_THERMAL_EFF = Param(0.90, 0.75, 0.98, "resistive heating w/ losses")
+
+# Continuous reactor heat loss (kWh per kg O2), electrical-equivalent. A hot reactor
+# (800-1900 C) radiating/conducting to its surroundings loses heat continuously,
+# independent of the per-kg sensible heating; this is omitted by the sensible-heat-only
+# stages. The ONLY measured carbothermal datum (NASA CaRD brassboard) implies ~63-93 kWh
+# THERMAL/kg O2 for the reduction step, dominated by this loss at demonstrated (tiny)
+# scale. A scaled, well-insulated plant amortizes it over far more throughput, so the
+# true value is highly scale-dependent and uncertain: nominal 8 (a moderately-insulated
+# scaled plant), range 2 (large well-insulated) to 30 (near the brassboard upper bound),
+# log-uniform. Applied to all high-temperature routes; the low-temperature water route
+# (sublimation at ~273 K) is exempt. This term is what was missing when carbothermal
+# appeared "cheapest". Source: CaRD (NTRS 20230008393), de-rated for scale.
+REACTOR_STANDING_LOSS = Param(8.0, 2.0, 30.0, "continuous reactor heat loss; CaRD upper bound de-rated", log=True)
 
 # Reaction temperatures (K) by route.
 T_REACT_H2_REDUCTION = Param(1273.0, 1073.0, 1373.0, "800-1100 C; Leger 2025 / ESA ProSPA")

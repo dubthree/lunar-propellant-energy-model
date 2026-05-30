@@ -1,3 +1,5 @@
+> **Note (v0.9):** This companion note predates the v0.9 reactor-heat-loss correction. Some numbers below are superseded; see `MANUSCRIPT.md` for the current model (the PSR water route is now the most energy-efficient, not carbothermal). The qualitative argument of this note still holds.
+
 # A Common Electrical-Energy Basis for Lunar Propellant Production Routes
 
 **A reproducible, uncertainty-quantified model that puts five lunar oxygen /

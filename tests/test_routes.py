@@ -58,23 +58,22 @@ def test_dominance_probabilities_are_valid():
                 assert c.beats(a, b) + c.beats(b, a) <= 1.0 + 1e-9
 
 
-def test_carbothermal_is_robustly_cheapest():
-    # With all routes on a common electrical basis and realistic electrochemistry,
-    # carbothermal is the most likely cheapest route (paired Monte Carlo).
+def test_water_route_is_robustly_cheapest():
+    # Once continuous reactor heat loss is charged to the high-temperature routes, the
+    # low-temperature PSR water route (sublimation at ~273 K) avoids that penalty and is
+    # the most likely cheapest route by a wide margin (paired Monte Carlo).
     c = compare(n=8000)
-    assert c.p_cheapest["carbothermal"] == max(c.p_cheapest.values())
-    assert c.p_cheapest["carbothermal"] > 0.5
-    # it beats H2 reduction always and MRE most of the time (MRE's lower tail, from its
-    # wide cell-voltage uncertainty, occasionally dips below carbothermal).
-    assert c.beats("carbothermal", "h2_reduction") > 0.95
-    assert c.beats("carbothermal", "mre") > 0.80
+    assert c.p_cheapest["water_mining"] == max(c.p_cheapest.values())
+    assert c.p_cheapest["water_mining"] > 0.7
+    # it beats every high-temperature route in the large majority of trials.
+    for k in ("carbothermal", "mre", "molten_salt", "h2_reduction"):
+        assert c.beats("water_mining", k) > 0.8
 
 
-def test_mre_and_h2_reduction_are_the_two_most_intensive():
-    # Honest revised finding (v0.2): once MRE uses a realistic full-cell voltage, it is
-    # among the MOST energy-intensive routes, not competitive. The two worst routes are
-    # MRE and H2 reduction; carbothermal/molten-salt/water are essentially never worst.
+def test_high_temperature_routes_are_the_intensive_ones():
+    # The worst route is always one of the four high-temperature routes; the water route
+    # is essentially never the worst. MRE is the single most likely worst (cell voltage +
+    # reactor loss), but the key robust claim is that water is never the worst.
     c = compare(n=8000)
-    assert c.p_worst["mre"] + c.p_worst["h2_reduction"] > 0.95
-    for k in ("carbothermal", "molten_salt", "water_mining"):
-        assert c.p_worst[k] < 0.05
+    assert c.p_worst["water_mining"] < 0.02
+    assert c.p_worst["mre"] == max(c.p_worst.values())
