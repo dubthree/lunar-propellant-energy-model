@@ -14,10 +14,10 @@ PNAS 2025: 24.3 ± 5.8 kWh/kg LOX for hydrogen reduction).
 
 ## Papers (each stands independently)
 
-- [`paper/MANUSCRIPT.md`](paper/MANUSCRIPT.md) — **draft submission manuscript**: abstract,
-  methods, two-anchor validation, sensitivity, findings, figures, references; leads with the
-  core model and folds in the companion analyses.
-- [`paper/PAPER.md`](paper/PAPER.md) — the core model technical note, route rankings, validation.
+- [`paper/MANUSCRIPT.md`](paper/MANUSCRIPT.md) — **the canonical paper** (also typeset as
+  `paper/manuscript.pdf`): abstract, methods, two-anchor validation, sensitivity, findings,
+  figures, references; leads with the core model and folds in the companion analyses.
+  (`paper/PAPER.md` is an earlier note now consolidated into this one.)
 - [`paper/WASTE-HEAT-OFFSET.md`](paper/WASTE-HEAT-OFFSET.md) — a quantified, Second-Law-safe
   case that compute/GPU waste heat can supply the *low-grade* thermal demand of PSR water
   mining (but not high-grade reduction heat). Backed by `lpem.waste_heat`.

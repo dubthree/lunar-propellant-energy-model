@@ -1,7 +1,7 @@
 # A Common Electrical-Energy Basis for Comparing Lunar Oxygen and Propellant Production Routes
 
 **Walter Kueffer**
-Draft manuscript, version 0.9 (2026-05-30). Code, data, and all figures are reproducible
+Draft manuscript, version 0.10 (2026-05-30). Code, data, and all figures are reproducible
 from the open-source model at https://github.com/dubthree/lunar-propellant-energy-model.
 
 ---
