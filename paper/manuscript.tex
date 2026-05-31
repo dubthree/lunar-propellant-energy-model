@@ -12,7 +12,7 @@
 
 \title{A Common Electrical-Energy Basis for Comparing Lunar Oxygen and Propellant Production Routes}
 \author{Walter Kueffer}
-\date{Draft manuscript, version 0.10 (2026-05-30)}
+\date{Draft manuscript, version 0.11 (2026-05-30)}
 
 \begin{document}
 
@@ -290,6 +290,22 @@ hinges on small-scale LH$_2$ liquefaction, a comparatively well-characterized te
 \emph{ranking} is robust: the water route's lead over every high-temperature route
 survives across the parameter ranges, precisely because its advantage (no high-temperature
 reactor) is structural rather than parametric.
+
+Because the one-at-a-time tornado holds other parameters at nominal and ignores
+interactions, we corroborate it with a global, variance-based \textbf{Sobol}
+decomposition (\texttt{python -m lpem -{}-sobol <route>}; Saltelli/Jansen estimators,
+numpy-only), reporting each input's first-order index $S_i$ (variance explained alone)
+and total-effect index $S_{Ti}$ (including interactions). The Sobol result confirms the
+tornado's dominant drivers globally: for the water route, LH2 liquefaction
+($S_{Ti}\approx0.80$); for MRE, the reactor-loss term ($\approx0.61$) and the coupled
+cell-voltage/efficiency latent ($\approx0.41$); for hydrogen reduction, O2 yield
+($\approx0.59$). It also adds what the tornado cannot see: hydrogen reduction's
+first-order indices sum to only $\approx0.70$ while its total-effects sum to $\approx1.0$,
+so roughly 30\% of its variance is interactions, and heat recuperation has a near-zero
+first-order effect but a total-effect of $\approx0.21$ (it matters almost entirely through
+its interaction with O2 yield, the two multiply in the heating term). The water and MRE
+routes are nearly additive. The dominant uncertainties are thus identified by both a local
+and a global method, and the interaction structure is quantified rather than assumed away.
 
 \section{Findings}
 \label{sec:findings}

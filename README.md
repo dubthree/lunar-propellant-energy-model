@@ -65,10 +65,11 @@ python -m lpem --plant-tonnes 50   # + power plant & landed-mass sizing per rout
 python -m lpem --waste-heat   # + low-grade compute-waste-heat offset per route
 python -m lpem --benefit      # + cascade benefit & break-even probability
 python -m lpem --sensitivity mre   # tornado: which parameters drive a route's uncertainty
+python -m lpem --sobol mre         # Sobol variance-based sensitivity (first-order + total-effect)
 python scripts/make_figures.py     # regenerate manuscript figures
 python -m lpem --figure results/comparison.png
 python -m lpem --markdown     # tables as Markdown
-pytest                        # 48 tests, including the Leger validation anchor
+pytest                        # 54 tests, including the Leger validation anchor
 ```
 
 ## How it is organized
@@ -83,6 +84,7 @@ pytest                        # 48 tests, including the Leger validation anchor
 | `src/lpem/waste_heat.py` | low-grade compute-waste-heat offset (grade-matched), backs the waste-heat paper |
 | `src/lpem/benefit.py` | bidirectional benefit + break-even enabling probability for the cascade |
 | `src/lpem/sensitivity.py` | one-at-a-time tornado: which parameters drive each route's uncertainty |
+| `src/lpem/sobol.py` | global variance-based (Sobol) sensitivity: first-order + total-effect indices |
 | `src/lpem/cli.py` | table / figure / markdown / plant-sizing / waste-heat output |
 | `tests/` | dimensional + conservation unit tests, route sanity, arch sizing, and the Leger validation |
 

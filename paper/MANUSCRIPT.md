@@ -1,7 +1,7 @@
 # A Common Electrical-Energy Basis for Comparing Lunar Oxygen and Propellant Production Routes
 
 **Walter Kueffer**
-Draft manuscript, version 0.10 (2026-05-30). Code, data, and all figures are reproducible
+Draft manuscript, version 0.11 (2026-05-30). Code, data, and all figures are reproducible
 from the open-source model at https://github.com/dubthree/lunar-propellant-energy-model.
 
 ---
@@ -233,6 +233,22 @@ hinges on small-scale LH2 liquefaction, a comparatively well-characterized term.
 across the parameter ranges, precisely because its advantage (no high-temperature reactor)
 is structural rather than parametric.
 
+Because the one-at-a-time tornado holds other parameters at nominal and ignores
+interactions, we corroborate it with a global, variance-based **Sobol** decomposition
+(`python -m lpem --sobol <route>`; Saltelli/Jansen estimators, numpy-only). It reports each
+input's first-order index S_i (variance explained alone) and total-effect index S_Ti
+(including interactions). The Sobol result confirms the tornado's dominant drivers globally:
+for the water route, LH2 liquefaction (S_Ti ~0.80); for MRE, the reactor-loss term (~0.61)
+and the coupled cell-voltage/efficiency latent (~0.41); for hydrogen reduction, O2 yield
+(~0.59). It also adds what the tornado cannot see: hydrogen reduction's first-order indices
+sum to only ~0.70 while its total-effects sum to ~1.0, so roughly 30% of its variance is
+interactions, and heat recuperation has a near-zero first-order effect but a total-effect of
+~0.21, i.e. it matters almost entirely through its interaction with O2 yield (the two
+multiply in the heating term). The water and MRE routes are nearly additive (first-order
+indices already sum to ~1). This is the stronger form of the robustness claim: the dominant
+uncertainties are identified by both a local and a global method, and the interaction
+structure is quantified rather than assumed away.
+
 ## 6. Findings
 
 **Finding 1: The low-temperature polar water route is the most energy-efficient AND the
@@ -335,10 +351,11 @@ pip install -e .
 python -m lpem                 # Table 1
 python -m lpem --dominance     # Table 2
 python -m lpem --sensitivity mre   # Section 5 tornado
+python -m lpem --sobol mre          # Section 5 Sobol variance decomposition
 python -m lpem --plant-tonnes 50   # Section 7
 python -m lpem --waste-heat --benefit   # Section 8
 python scripts/make_figures.py     # Figures 1-3
-pytest                         # 48 tests, incl. the validation anchors
+pytest                         # 54 tests, incl. the validation anchors
 ```
 
 ## References

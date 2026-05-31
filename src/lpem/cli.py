@@ -13,6 +13,7 @@ from .arch import size_all
 from .model import compare, evaluate_all
 from .routes import ROUTES
 from .sensitivity import tornado
+from .sobol import sobol
 from .waste_heat import heat_balance, offset_summary
 from .benefit import estimate as estimate_benefit
 
@@ -128,6 +129,28 @@ def _format_sensitivity(route_key: str, markdown: bool = False) -> str:
     return "\n".join(lines)
 
 
+def _format_sobol(route_key: str, n: int, markdown: bool = False) -> str:
+    rows = sobol(route_key, n=n)
+    title = (
+        f"Sobol variance-based sensitivity for '{route_key}' ({n} base samples): "
+        f"first-order S_i and total-effect S_Ti (fraction of output variance)"
+    )
+    header = ["Input", "S_i", "S_Ti", "interaction (S_Ti - S_i)"]
+    table = [[r.input_label, f"{r.first_order:.2f}", f"{r.total_effect:.2f}",
+              f"{r.total_effect - r.first_order:.2f}"] for r in rows]
+    if markdown:
+        out = [f"**{title}**", "",
+               "| " + " | ".join(header) + " |",
+               "|" + "|".join(["---"] * len(header)) + "|"]
+        out += ["| " + " | ".join(row) + " |" for row in table]
+        return "\n".join(out)
+    widths = [max(len(header[i]), *(len(row[i]) for row in table)) for i in range(len(header))]
+    fmt = "  ".join("{:<" + str(w) + "}" for w in widths)
+    lines = [title, fmt.format(*header), fmt.format(*("-" * w for w in widths))]
+    lines += [fmt.format(*row) for row in table]
+    return "\n".join(lines)
+
+
 def _format_waste_heat(t_reject: float, compute_kw: float, o2_t: float) -> str:
     summ = offset_summary(t_reject_k=t_reject)
     order = sorted(summ.values(), key=lambda r: -r.fraction_of_total)
@@ -212,10 +235,16 @@ def main(argv: list[str] | None = None) -> int:
                     help="also print the cascade benefit + break-even probability analysis")
     ap.add_argument("--sensitivity", metavar="ROUTE", choices=list(ROUTES),
                     help="print the one-at-a-time (tornado) sensitivity table for ROUTE")
+    ap.add_argument("--sobol", metavar="ROUTE", choices=list(ROUTES),
+                    help="print Sobol variance-based sensitivity (first-order + total-effect) for ROUTE")
+    ap.add_argument("--sobol-n", type=int, default=4096, help="base sample size for --sobol")
     args = ap.parse_args(argv)
 
     if args.sensitivity:
         print(_format_sensitivity(args.sensitivity, markdown=args.markdown))
+        return 0
+    if args.sobol:
+        print(_format_sobol(args.sobol, n=args.sobol_n, markdown=args.markdown))
         return 0
 
     results = evaluate_all(n=args.n, seed=args.seed)
