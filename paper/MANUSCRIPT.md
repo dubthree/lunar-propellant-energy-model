@@ -1,7 +1,7 @@
 # A Common Electrical-Energy Basis for Comparing Lunar Oxygen and Propellant Production Routes
 
 **Walter Kueffer**
-Draft manuscript, version 0.11 (2026-05-30). Code, data, and all figures are reproducible
+Draft manuscript, version 0.12 (2026-06-03). Code, data, and all figures are reproducible
 from the open-source model at https://github.com/dubthree/lunar-propellant-energy-model.
 
 ---
@@ -29,7 +29,7 @@ Leger's central value, with the Monte-Carlo distribution centered somewhat lower
 ~21), reported as substantial interval overlap between two independent estimates. Using a
 paired Monte Carlo that shares common parameters across routes, we report dominance
 probabilities rather than overlapping error bars. The central finding is that **the polar
-water-ice route is both the most energy-efficient (cheapest in 99% of paired trials) and the
+water-ice route is both the most energy-efficient (cheapest in 98% of paired trials) and the
 only route that yields a complete LOX+LH2 propellant**. The reason is structural and, to our
 knowledge, not previously quantified on a common basis: water mining is the only
 low-temperature route (sublimation at ~273 K), so it alone escapes the large, continuous
@@ -177,7 +177,7 @@ estimates reported with wide intervals and as probabilities, not point claims.
 
 | Route | Yields | kWh/kg O2 (nominal) | 90% CI | kWh/kg propellant |
 |---|---|---|---|---|
-| PSR water mining | LOX+LH2 | 14.0 | 11.8-16.4 | **12.5** |
+| PSR water mining | LOX+LH2 | 14.0 | 12.0-16.9 | **12.5** |
 | Carbothermal (CH4) | LOX | 21.1 | 16.1-33.1 | 21.1 |
 | Molten-salt (FFC) | LOX | 23.3 | 17.9-36.2 | 23.3 |
 | H2 reduction (ilmenite) | LOX | 24.3 | 16.4-27.1 | 24.3 |
@@ -198,13 +198,13 @@ Monte-Carlo interval); the shaded band is Leger 2025's 1-sigma for hydrogen redu
 
 | Route | P(cheapest) | P(worst) |
 |---|---|---|
-| PSR water mining | 0.99 | 0.00 |
+| PSR water mining | 0.98 | 0.00 |
 | Carbothermal (CH4) | 0.01 | 0.00 |
 | H2 reduction (ilmenite) | 0.01 | 0.09 |
 | Molten-salt (FFC) | 0.00 | 0.15 |
 | Molten regolith electrolysis | 0.00 | 0.76 |
 
-The water route is the cheapest in 99% of paired trials and beats every high-temperature
+The water route is the cheapest in 98% of paired trials and beats every high-temperature
 route in >95%. Among the high-temperature routes MRE is the most likely worst (0.76),
 driven by its reactor loss and cell voltage; the rest are not cleanly separable. The water
 route is essentially never the worst.
@@ -231,28 +231,35 @@ only datum today is the loss-dominated CaRD brassboard). Second, the water route
 hinges on small-scale LH2 liquefaction, a comparatively well-characterized term. The
 *ranking* is robust: the water route's lead over every high-temperature route survives
 across the parameter ranges, precisely because its advantage (no high-temperature reactor)
-is structural rather than parametric.
+is structural rather than parametric. This is true even of ice grade: widening its lower
+bound toward ~1 wt% leaves the route *ranking* intact, because the water total is dominated
+by grade-independent electrolysis and liquefaction rather than the mining term, but the
+*Centradiant cascade thermal closure* (100 kW of compute waste heat supporting ~1.2 t/day of
+water) IS grade-sensitive and degrades as grade falls toward ~1 wt%, so that risk lives in
+the architecture, not in this route-energy model.
 
 Because the one-at-a-time tornado holds other parameters at nominal and ignores
 interactions, we corroborate it with a global, variance-based **Sobol** decomposition
-(`python -m lpem --sobol <route>`; Saltelli/Jansen estimators, numpy-only). It reports each
-input's first-order index S_i (variance explained alone) and total-effect index S_Ti
-(including interactions). The Sobol result confirms the tornado's dominant drivers globally:
-for the water route, LH2 liquefaction (S_Ti ~0.80); for MRE, the reactor-loss term (~0.61)
-and the coupled cell-voltage/efficiency latent (~0.41); for hydrogen reduction, O2 yield
-(~0.59). It also adds what the tornado cannot see: hydrogen reduction's first-order indices
-sum to only ~0.70 while its total-effects sum to ~1.0, so roughly 30% of its variance is
-interactions, and heat recuperation has a near-zero first-order effect but a total-effect of
-~0.21, i.e. it matters almost entirely through its interaction with O2 yield (the two
-multiply in the heating term). The water and MRE routes are nearly additive (first-order
-indices already sum to ~1). This is the stronger form of the robustness claim: the dominant
-uncertainties are identified by both a local and a global method, and the interaction
-structure is quantified rather than assumed away.
+(`python -m lpem --sobol <route>`; Saltelli/Jansen estimators, numpy-only). We report the
+total-effect index S_Ti (variance involving an input, including its interactions) as the
+primary measure; the first-order index S_i (variance explained alone) is high-variance when
+one input dominates (the Saltelli first-order estimator overshoots for the water route's
+log-triangular liquefaction term), so we read it as indicative only. The Sobol result confirms
+the tornado's dominant drivers globally: for the water route, LH2 liquefaction (S_Ti ~0.78);
+for MRE, the reactor-loss term (~0.60) and the coupled cell-voltage/efficiency latent (~0.40);
+for hydrogen reduction, O2 yield (~0.60) followed by heat recuperation (~0.21). At a converged
+sample size all three routes are close to additive: total-effect indices sum to ~1.0 and the
+per-input interaction terms (S_Ti - S_i) are within estimator noise of zero, so the dominant
+uncertainties act largely on their own rather than through strong interactions (an earlier,
+under-sampled run mistook estimator noise in the first-order indices for ~30% interaction
+variance on hydrogen reduction; it is not borne out at the converged sample size). The
+robustness claim is therefore the more modest one: the dominant uncertainties are identified
+by both a local (tornado) and a global (Sobol) method.
 
 ## 6. Findings
 
 **Finding 1: The low-temperature polar water route is the most energy-efficient AND the
-only full-propellant route.** It is the cheapest in 99% of paired trials (14.0 kWh/kg O2,
+only full-propellant route.** It is the cheapest in 98% of paired trials (14.0 kWh/kg O2,
 12.5 per kg of propellant) and is essentially never the worst. The mechanism is structural:
 water mining operates at the ~273 K sublimation point, so it is the only route that does
 not run a hot reactor and therefore the only one that escapes the continuous reactor

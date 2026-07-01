@@ -195,7 +195,12 @@ V_CELL_MRE = Param(3.5, 2.2, 6.0, "MOE decomposition cell voltage; Sibille/Allan
 V_CELL_MOLTEN_SALT = Param(3.0, 2.6, 3.6, "FFC Cambridge full cell voltage")
 
 # --- Water route (PSR ice) ---
-# Ice grade: weight fraction water in mined icy regolith.
-ICE_GRADE = Param(0.056, 0.040, 0.100, "LCROSS 5.6+-2.9 wt%; CLPA 4-10 wt%")
+# Ice grade: weight fraction water in mined icy regolith. Lower bound widened to ~1 wt%
+# (0.010): LCROSS returned 5.6+-2.9 wt% at Cabeus, but neutron-spectrometer and CLPA
+# surveys show much of the polar cold-trap inventory sits at 1-2 wt% or lower, and a
+# real plant sited on average (not best-case) terrain must survive that lean tail. This
+# widens the water route's expensive tail without moving its mode; it does not change the
+# ranking (the route is dominated by grade-independent electrolysis and liquefaction).
+ICE_GRADE = Param(0.056, 0.010, 0.100, "LCROSS 5.6+-2.9 wt%; lean CLPA/neutron tail to ~1 wt%")
 # Sublimation reach temperature (K): warm enough to drive off water under vacuum.
 T_SUBLIMATION = Param(273.0, 250.0, 300.0, "thermal mining target temp")
