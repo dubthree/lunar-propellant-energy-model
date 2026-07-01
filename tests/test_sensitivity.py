@@ -36,11 +36,14 @@ def test_dominant_drivers_is_tornado_head():
         assert top == full[:3]
 
 
-def test_h2_reduction_dominant_driver_is_heating_related():
-    # For H2 reduction the heating chain dominates: the top driver should be the
-    # O2 yield (sets how much feed is heated) or the heat-recuperation fraction.
-    top = dominant_drivers("h2_reduction", top=1)[0]
-    assert top.param in (P.YIELD_H2_REDUCTION, P.RECUP_REGOLITH)
+def test_h2_reduction_dominant_driver_is_standing_loss():
+    # With the reactor standing loss now charged symmetrically to H2 reduction, its wide
+    # log-range (2-30 kWh/kg O2) makes it the single largest one-at-a-time swing, ahead of
+    # the heating chain (O2 yield, heat recuperation) that dominated before.
+    top3 = {d.param for d in dominant_drivers("h2_reduction", top=3)}
+    assert dominant_drivers("h2_reduction", top=1)[0].param is P.REACTOR_STANDING_LOSS
+    # The heating chain is still a top driver, just no longer the first.
+    assert P.YIELD_H2_REDUCTION in top3 or P.RECUP_REGOLITH in top3
 
 
 def test_mre_dominant_drivers_are_loss_or_faradaic():

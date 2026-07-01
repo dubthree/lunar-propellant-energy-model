@@ -151,6 +151,42 @@ def _format_sobol(route_key: str, n: int, markdown: bool = False) -> str:
     return "\n".join(lines)
 
 
+def _format_solar_thermal(n: int, seed: int, markdown: bool = False) -> str:
+    """Baseline vs solar-thermal electrical totals side by side (report-only sensitivity)."""
+    base = evaluate_all(n=n, seed=seed)
+    solar = evaluate_all(n=n, seed=seed, solar_thermal=True)
+    title = (
+        "Solar-thermal sensitivity: high-grade heat (sensible + fusion + reaction + standing "
+        "loss) supplied by solar concentrators instead of resistive electric heat"
+    )
+    caption = (
+        "Applies ONLY at a sunlit site and ignores concentrator mass. The PSR water route "
+        "sits in permanent shadow and cannot use solar-thermal, so it stays at baseline."
+    )
+    header = ["Route", "Yields", "Baseline kWh/kg O2", "Solar-thermal kWh/kg O2", "Delta"]
+    rows = []
+    for key, r in sorted(base.items(), key=lambda kv: kv[1].nominal):
+        s = solar[key]
+        rows.append([
+            r.name, r.yields,
+            f"{r.nominal:.1f} ({r.p5:.1f}-{r.p95:.1f})",
+            f"{s.nominal:.1f} ({s.p5:.1f}-{s.p95:.1f})",
+            f"-{r.nominal - s.nominal:.1f}",
+        ])
+    if markdown:
+        out = [f"**{title}**", "", f"_{caption}_", "",
+               "| " + " | ".join(header) + " |",
+               "|" + "|".join(["---"] * len(header)) + "|"]
+        out += ["| " + " | ".join(row) + " |" for row in rows]
+        return "\n".join(out)
+    widths = [max(len(header[i]), *(len(row[i]) for row in rows)) for i in range(len(header))]
+    fmt = "  ".join("{:<" + str(w) + "}" for w in widths)
+    lines = [title, fmt.format(*header), fmt.format(*("-" * w for w in widths))]
+    lines += [fmt.format(*row) for row in rows]
+    lines += ["", caption]
+    return "\n".join(lines)
+
+
 def _format_waste_heat(t_reject: float, compute_kw: float, o2_t: float) -> str:
     summ = offset_summary(t_reject_k=t_reject)
     order = sorted(summ.values(), key=lambda r: -r.fraction_of_total)
@@ -233,6 +269,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="compute waste-heat reject temperature (K) for --waste-heat")
     ap.add_argument("--benefit", action="store_true",
                     help="also print the cascade benefit + break-even probability analysis")
+    ap.add_argument("--solar-thermal", action="store_true",
+                    help="also print baseline vs solar-thermal totals (sunlit-site sensitivity)")
     ap.add_argument("--sensitivity", metavar="ROUTE", choices=list(ROUTES),
                     help="print the one-at-a-time (tornado) sensitivity table for ROUTE")
     ap.add_argument("--sobol", metavar="ROUTE", choices=list(ROUTES),
@@ -264,6 +302,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.benefit:
         print()
         print(_format_benefit())
+    if args.solar_thermal:
+        print()
+        print(_format_solar_thermal(n=args.n, seed=args.seed, markdown=args.markdown))
     return 0
 
 

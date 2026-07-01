@@ -71,9 +71,30 @@ def test_water_route_is_robustly_cheapest():
 
 
 def test_high_temperature_routes_are_the_intensive_ones():
-    # The worst route is always one of the four high-temperature routes; the water route
-    # is essentially never the worst. MRE is the single most likely worst (cell voltage +
-    # reactor loss), but the key robust claim is that water is never the worst.
+    # The worst route is always one of the four high-temperature routes; the water route is
+    # essentially never the worst. With the reactor standing loss now charged symmetrically to
+    # H2 reduction too, H2 (highest nominal) and MRE are the two most likely worst; the robust
+    # claim is that water is never the worst.
     c = compare(n=8000)
     assert c.p_worst["water_mining"] < 0.02
-    assert c.p_worst["mre"] == max(c.p_worst.values())
+    worst_route = max(c.p_worst, key=c.p_worst.get)
+    assert worst_route in ("h2_reduction", "mre")
+
+
+def test_water_total_rises_when_capture_efficiency_falls():
+    # Charging the water route a vapor-capture efficiency: poorer capture (0.50) forces more
+    # sublimation and regolith throughput per kg O2 than good capture (0.95), so the total rises.
+    from lpem import params as P
+    from lpem.sensitivity import tornado
+    row = {r.param: r for r in tornado("water_mining")}[P.CAPTURE_EFFICIENCY]
+    assert row.low_total > row.high_total  # low capture efficiency => higher energy
+
+
+def test_solar_thermal_lowers_hot_routes_but_not_water():
+    # Report-only sensitivity: with high-grade heat supplied by solar concentrators, every hot
+    # route drops (heat costs zero electrical); the PSR water route sits in shadow and is unchanged.
+    base = evaluate_all(n=200)
+    solar = evaluate_all(n=200, solar_thermal=True)
+    assert solar["water_mining"].nominal == pytest.approx(base["water_mining"].nominal)
+    for k in ("h2_reduction", "carbothermal", "mre", "molten_salt"):
+        assert solar[k].nominal < base[k].nominal

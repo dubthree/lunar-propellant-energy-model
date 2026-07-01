@@ -17,10 +17,25 @@ from .routes import ROUTES, RouteResult
 
 
 class Draw:
-    """Resolves Params to scalars; memoized within one evaluation/trial."""
+    """Resolves Params to scalars; memoized within one evaluation/trial.
 
-    def __init__(self, rng: np.random.Generator | None = None) -> None:
+    Two report-only flags change how routes compose (they never alter parameter draws):
+    - `exclude_standing_loss`: zero every continuous standing-loss term, giving each route's
+      loss-free configuration (used to validate H2 reduction against Leger 2025).
+    - `solar_thermal`: charge zero electrical energy for high-grade heat terms, as if a solar
+      concentrator supplied them (sunlit-site sensitivity; the PSR water route never sets it).
+    Both default False, so the headline tables are unaffected.
+    """
+
+    def __init__(
+        self,
+        rng: np.random.Generator | None = None,
+        exclude_standing_loss: bool = False,
+        solar_thermal: bool = False,
+    ) -> None:
         self.rng = rng
+        self.exclude_standing_loss = exclude_standing_loss
+        self.solar_thermal = solar_thermal
         # Key on the Param object itself (frozen dataclass => hashable). This keeps a
         # parameter referenced twice in one trial consistent, and is robust to derived
         # Params (unlike keying on id(), which breaks for locally-constructed objects).
@@ -68,17 +83,26 @@ class MCResult:
         return (self.p95 - self.p5) / 2.0
 
 
-def evaluate(route_key: str, n: int = 20000, seed: int = 12345) -> MCResult:
+def evaluate(
+    route_key: str,
+    n: int = 20000,
+    seed: int = 12345,
+    exclude_standing_loss: bool = False,
+    solar_thermal: bool = False,
+) -> MCResult:
     """Evaluate one route: nominal point estimate plus an n-trial Monte-Carlo band."""
     fn = ROUTES[route_key]
 
-    nominal: RouteResult = fn(Draw(None))
+    def mk(rng):
+        return Draw(rng, exclude_standing_loss=exclude_standing_loss, solar_thermal=solar_thermal)
+
+    nominal: RouteResult = fn(mk(None))
 
     rng = np.random.default_rng(seed)
     totals = np.empty(n)
     per_prop = np.empty(n)
     for i in range(n):
-        r = fn(Draw(rng))
+        r = fn(mk(rng))
         totals[i] = r.total
         per_prop[i] = r.total_per_kg_propellant
 
@@ -99,8 +123,19 @@ def evaluate(route_key: str, n: int = 20000, seed: int = 12345) -> MCResult:
     )
 
 
-def evaluate_all(n: int = 20000, seed: int = 12345) -> dict[str, MCResult]:
-    return {key: evaluate(key, n=n, seed=seed) for key in ROUTES}
+def evaluate_all(
+    n: int = 20000,
+    seed: int = 12345,
+    exclude_standing_loss: bool = False,
+    solar_thermal: bool = False,
+) -> dict[str, MCResult]:
+    return {
+        key: evaluate(
+            key, n=n, seed=seed,
+            exclude_standing_loss=exclude_standing_loss, solar_thermal=solar_thermal,
+        )
+        for key in ROUTES
+    }
 
 
 @dataclass
@@ -119,7 +154,12 @@ class Comparison:
         return self.dominance[a][b]
 
 
-def compare(n: int = 20000, seed: int = 12345) -> Comparison:
+def compare(
+    n: int = 20000,
+    seed: int = 12345,
+    exclude_standing_loss: bool = False,
+    solar_thermal: bool = False,
+) -> Comparison:
     """Paired Monte Carlo: ONE shared Draw per trial across all routes.
 
     This is the statistically correct way to rank the routes. Because a single Draw is
@@ -135,7 +175,8 @@ def compare(n: int = 20000, seed: int = 12345) -> Comparison:
     rng = np.random.default_rng(seed)
     totals = {k: np.empty(n) for k in keys}
     for i in range(n):
-        draw = Draw(rng)  # shared across all routes this trial -> common params consistent
+        # shared across all routes this trial -> common params consistent
+        draw = Draw(rng, exclude_standing_loss=exclude_standing_loss, solar_thermal=solar_thermal)
         for k in keys:
             totals[k][i] = ROUTES[k](draw).total
 

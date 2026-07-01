@@ -78,6 +78,15 @@ class Param:
 # routes). Source: Schreiner et al.; Hayne et al. 2017 lunar regolith thermophysical model.
 CP_REGOLITH = Param(1.15, 0.9, 1.35, "enthalpy-mean over 250-1300 K; Hayne 2017 / Schreiner")
 
+# Cryogenic-range regolith specific heat (kJ/kg/K), for the PSR water route ONLY. The
+# CP_REGOLITH nominal (1.15) is an enthalpy mean over 250-1300 K and badly overstates cp
+# at cryogenic temperatures: over the water route's 70-273 K band, silicate/regolith cp
+# is far lower (Debye behaviour, ~0.3-0.6 kJ/kg/K). Using the hot-route mean here would
+# unfairly penalise the water route's host-regolith sensible term, so it gets its own
+# cryo-range value. Hot routes keep CP_REGOLITH. Source: Hemingway 1973 lunar-sample cp;
+# Ledlow 1992 / Hayne 2017 cryogenic regolith thermophysics.
+CP_REGOLITH_CRYO = Param(0.45, 0.3, 0.6, "cryo-range regolith cp, 70-273 K; Hemingway 1973 / Hayne 2017")
+
 # Latent heat of fusion of regolith/basalt (kJ/kg), for melt-based routes (MRE).
 FUSION_REGOLITH = Param(470.0, 350.0, 520.0, "basalt LoF; Ghiorso & Sack 1995, Navrotsky 2009")
 
@@ -204,3 +213,51 @@ V_CELL_MOLTEN_SALT = Param(3.0, 2.6, 3.6, "FFC Cambridge full cell voltage")
 ICE_GRADE = Param(0.056, 0.010, 0.100, "LCROSS 5.6+-2.9 wt%; lean CLPA/neutron tail to ~1 wt%")
 # Sublimation reach temperature (K): warm enough to drive off water under vacuum.
 T_SUBLIMATION = Param(273.0, 250.0, 300.0, "thermal mining target temp")
+
+# Vapor-capture efficiency: fraction of sublimated water actually captured (tent / cold
+# trap) rather than lost to the vacuum over fissured, unconsolidated PSR terrain. Direct
+# thermal mining sublimates water into vacuum and recaptures it on a cold surface; real
+# capture over rubble is leaky, so to DELIVER 1 kg of water you must sublimate 1/eta kg,
+# and the mining heat and regolith throughput scale by 1/eta. Nominal 0.75 (an engineering
+# target for a shrouded/tented cold-trap head); wide because no lunar-relevant demonstration
+# exists. This is a NEW loss charged to the water route, previously exempted. Source:
+# Sowers/Dreyer thermal-mining concept; Kornuta 2019 CisLunar Marketplace capture estimates.
+CAPTURE_EFFICIENCY = Param(0.75, 0.50, 0.95, "PSR vapor capture over fissured terrain; Sowers/Kornuta")
+
+# Icy-regolith excavation specific energy (kJ per kg regolith moved). The hot routes move
+# dry simulant with a bucket drum at ~79 J/kg (EXCAVATION_KWH_PER_KG_REGOLITH). Ice-cemented
+# regolith at 40-110 K is NOT dry simulant: it behaves like concrete (UCS tens of MPa), and
+# cutting/ripping it costs orders of magnitude more. Terrestrial rock-cutting specific
+# energies run ~50-250 kJ/kg; a purely radiant thermal-mining head that sublimates in place
+# (no mechanical cutting) could be far lower. This spans >2 decades, so log-triangular with a
+# wide range and a moderate nominal. Applied to the water route's regolith throughput (which
+# already carries the 1/capture-efficiency factor). Source: Zacny lunar-drilling/cutting data;
+# terrestrial rock-mechanics specific-energy range.
+ICY_EXCAVATION_SPECIFIC_ENERGY = Param(30.0, 2.0, 200.0, "icy-regolith cutting kJ/kg; Zacny / rock-mechanics", log=True)
+
+# PSR environmental standing loss (kWh per kg O2), electrical-equivalent. The water-route
+# analog of REACTOR_STANDING_LOSS: a ~273 K sublimation zone radiates continuously to the
+# cold PSR sky (sigma*(273^4 - 70^4) ~ 313 W/m2) and conducts into surrounding cold regolith
+# that yields no captured water. It is real and continuous, but much SMALLER than the hot
+# routes' loss because the driving temperature is 273 K, not 1300-1900 K (radiation ~ T^4).
+# Nominal 1.5, log-triangular 0.3 (well-shrouded, small footprint) to 8 (leaky, large
+# conductive contact). Charged to the water route only. Source: radiative estimate at 273 K;
+# scaled by analogy to the reactor standing-loss term.
+PSR_STANDING_LOSS = Param(1.5, 0.3, 8.0, "273 K sublimation-zone radiative/conductive loss", log=True)
+
+# Ice specific heat (kJ/kg/K), for sensible heating of the ice itself from PSR feed
+# temperature to the sublimation point. Water-ice cp falls steeply with temperature
+# (~1.4 near 100 K to ~2.1 near 273 K; CRC / Feistel-Wagner 2006); we use a band-mean.
+# This is the ice-side sensible term the old thermal-mining model omitted (it heated only
+# the dry host regolith). NOT recuperated: the water leaves the boundary as vapor.
+CP_ICE = Param(1.75, 1.4, 2.1, "water-ice cp band-mean 70-273 K; CRC / Feistel-Wagner 2006")
+
+# Captured-water reconditioning (kWh per kg O2), electrical-equivalent. Water captured on
+# the cold trap refreezes (passive, radiative, ~free), then must be re-melted (latent heat
+# of fusion 334 kJ/kg) and warmed to the electrolyzer feed temperature before splitting.
+# Per kg O2 that is WATER_PER_KG_O2 ~ 1.13 kg of captured water: ~1.13*334/3600 ~ 0.10 kWh
+# to melt, plus a small warm-up, delivered at the electric-to-thermal efficiency. Cleanup
+# (drying/purification) does not cover this phase-change energy, so it is a separate small
+# term. Nominal 0.12; range 0.06-0.25. Charged to the water route only. Source: CRC water
+# enthalpy of fusion; engineering warm-up estimate.
+WATER_RECONDITIONING = Param(0.12, 0.06, 0.25, "refreeze/re-melt (334 kJ/kg) + warm captured water")

@@ -106,25 +106,52 @@ def liquefaction_kwh(mass_kg: float, specific_kwh_per_kg: float) -> float:
     return mass_kg * specific_kwh_per_kg
 
 
+def water_sublimated_per_kg_o2(capture_efficiency: float) -> float:
+    """kg of water that must be SUBLIMATED per kg O2, given imperfect vapor capture.
+
+    Delivering C.WATER_PER_KG_O2 kg of captured water requires sublimating 1/eta as much,
+    because tent/cold-trap capture over fissured PSR terrain in vacuum is leaky. The mining
+    heat, ice sensible heat, and regolith throughput all scale with this (not the delivered
+    mass).
+    """
+    if not (0.0 < capture_efficiency <= 1.0):
+        raise ValueError("capture_efficiency must be in (0, 1]")
+    return C.WATER_PER_KG_O2 / capture_efficiency
+
+
+def water_regolith_per_kg_o2(ice_grade_wt: float, capture_efficiency: float) -> float:
+    """kg of dry host regolith processed per kg O2 (shared by mining heat and excavation)."""
+    regolith_per_kg_water = (1.0 - ice_grade_wt) / ice_grade_wt  # kg dry regolith per kg water
+    return regolith_per_kg_water * water_sublimated_per_kg_o2(capture_efficiency)
+
+
 def thermal_mining_kwh(
     ice_grade_wt: float,
-    cp_kj_per_kg_k: float,
+    cp_regolith_kj_per_kg_k: float,
+    cp_ice_kj_per_kg_k: float,
     dT: float,
     recup: float,
     electric_to_thermal_eff: float,
+    capture_efficiency: float,
 ) -> float:
     """Electrical-equivalent energy to thermally mine the water for one kg O2.
 
-    Heats the host regolith (sensible) and supplies the sublimation enthalpy of the
-    water. Returns kWh per kg O2 (scaling water -> O2 via stoichiometry).
+    Three heat loads: (1) host-regolith sensible heat (recuperable), (2) ice sensible heat
+    from feed to the sublimation point (NOT recuperated, leaves as vapor), and (3) the
+    sublimation enthalpy (NOT recuperated). All three scale with the SUBLIMATED water mass
+    (delivered/eta) via `capture_efficiency`. Returns kWh per kg O2.
     """
-    water_per_kg_o2 = C.WATER_PER_KG_O2
-    regolith_per_kg_water = (1.0 - ice_grade_wt) / ice_grade_wt  # kg dry regolith per kg water
-    regolith_per_kg_o2 = regolith_per_kg_water * water_per_kg_o2
-    # Recuperation applies only to the host-regolith sensible heat. The sublimation
-    # enthalpy is NOT recuperated: the water vapor IS the product and carries that
-    # energy out of the system boundary, so it cannot preheat incoming regolith.
-    sensible_kj = regolith_per_kg_o2 * cp_kj_per_kg_k * dT * (1.0 - recup)
-    sublimation_kj = water_per_kg_o2 * C.SUBLIMATION_H2O_KJ_PER_KG
-    electrical_kj = (sensible_kj + sublimation_kj) / electric_to_thermal_eff
+    if not (0.0 <= recup < 1.0):
+        raise ValueError("recup must be in [0, 1)")
+    if not (0.0 < electric_to_thermal_eff <= 1.0):
+        raise ValueError("electric_to_thermal_eff must be in (0, 1]")
+    water_sublimated = water_sublimated_per_kg_o2(capture_efficiency)
+    regolith_per_kg_o2 = water_regolith_per_kg_o2(ice_grade_wt, capture_efficiency)
+    # Recuperation applies only to the host-regolith sensible heat (it stays in the pit).
+    # The ice sensible heat and the sublimation enthalpy are NOT recuperated: the water
+    # vapor IS the product and carries that energy out of the system boundary.
+    regolith_sensible_kj = regolith_per_kg_o2 * cp_regolith_kj_per_kg_k * dT * (1.0 - recup)
+    ice_sensible_kj = water_sublimated * cp_ice_kj_per_kg_k * dT
+    sublimation_kj = water_sublimated * C.SUBLIMATION_H2O_KJ_PER_KG
+    electrical_kj = (regolith_sensible_kj + ice_sensible_kj + sublimation_kj) / electric_to_thermal_eff
     return electrical_kj / C.KJ_PER_KWH

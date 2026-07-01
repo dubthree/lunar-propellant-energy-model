@@ -66,9 +66,27 @@ def test_faradaic_known_value():
 
 
 def test_thermal_mining_richer_ice_costs_less_per_kg_o2():
-    lean = S.thermal_mining_kwh(0.04, 1.0, 200, 0.2, 0.9)
-    rich = S.thermal_mining_kwh(0.10, 1.0, 200, 0.2, 0.9)
+    # signature: (ice_grade, cp_regolith, cp_ice, dT, recup, e2t, capture_efficiency)
+    lean = S.thermal_mining_kwh(0.04, 1.0, 1.75, 200, 0.2, 0.9, 0.75)
+    rich = S.thermal_mining_kwh(0.10, 1.0, 1.75, 200, 0.2, 0.9, 0.75)
     assert rich < lean  # less host regolith to heat per kg water
+
+
+def test_thermal_mining_lower_capture_costs_more():
+    # Poorer vapor capture means sublimating (and heating regolith for) more water per kg O2.
+    good = S.thermal_mining_kwh(0.056, 0.45, 1.75, 200, 0.2, 0.9, 0.95)
+    poor = S.thermal_mining_kwh(0.056, 0.45, 1.75, 200, 0.2, 0.9, 0.50)
+    assert poor > good
+
+
+def test_water_throughput_scales_with_capture_and_grade():
+    # Sublimated water = delivered / capture efficiency.
+    assert S.water_sublimated_per_kg_o2(0.5) == pytest.approx(2 * S.water_sublimated_per_kg_o2(1.0))
+    # Regolith processed per kg O2 rises as grade falls and as capture efficiency falls.
+    assert S.water_regolith_per_kg_o2(0.02, 0.75) > S.water_regolith_per_kg_o2(0.10, 0.75)
+    assert S.water_regolith_per_kg_o2(0.056, 0.50) > S.water_regolith_per_kg_o2(0.056, 0.95)
+    with pytest.raises(ValueError):
+        S.water_sublimated_per_kg_o2(0.0)
 
 
 def test_liquefaction_linear():

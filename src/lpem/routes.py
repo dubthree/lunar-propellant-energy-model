@@ -17,6 +17,36 @@ from . import params as P
 from . import stages as S
 
 
+def _standing_loss(draw, param):
+    """A continuous standing/environmental heat-loss term, honoring the loss-free flag.
+
+    `Draw(..., exclude_standing_loss=True)` zeroes every continuous heat-loss term so a
+    route can be evaluated in its loss-free configuration. This is used to cross-check the
+    H2-reduction route against Leger 2025: the route is built bottom-up, and its LOSS-FREE
+    total matches Leger's 24.3 kWh/kg LOX, which suggests Leger's full-chain figure also
+    omits a continuous standing loss. The headline table charges the loss symmetrically to
+    every hot route (H2 included). Resolvers without the flag (tornado, Sobol) fall through
+    to the drawn value via getattr's default.
+    """
+    if getattr(draw, "exclude_standing_loss", False):
+        return 0.0
+    return draw(param)
+
+
+def _thermal(draw, value):
+    """A high-grade heat term a solar concentrator could supply for free at a sunlit site.
+
+    Under `Draw(..., solar_thermal=True)` the thermal terms (sensible/fusion heating,
+    reaction enthalpy, reactor standing loss) cost zero ELECTRICAL energy: they are supplied
+    by solar-thermal concentrators, not resistive heaters. Electrochemical (faradaic,
+    electrolysis) and cryogenic (liquefaction) terms are unaffected. The PSR water route
+    never sets this flag (a permanently shadowed crater has no sun), so it stays on the
+    baseline electrical basis. This is a report-only sensitivity; the default path leaves
+    the flag False.
+    """
+    return 0.0 if getattr(draw, "solar_thermal", False) else value
+
+
 @dataclass
 class RouteResult:
     """Energy breakdown for one route, on a per-kg-O2 basis."""
@@ -47,13 +77,16 @@ def h2_reduction(draw) -> RouteResult:
     e2t = draw(P.ELECTRIC_TO_THERMAL_EFF)
     b = {
         "excavation": S.excavation_kwh(feed, draw(P.EXCAVATION_KWH_PER_KG_REGOLITH)),
-        "heating": S.heating_kwh(feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t),
-        "reaction": S.reaction_enthalpy_kwh(draw(P.REACTION_ENTHALPY_H2_REDUCTION)),
-        # NOTE: no separate reactor_loss term here. Unlike the other thermochemical routes,
-        # H2 reduction is calibrated to Leger 2025, whose full-chain figure already reflects
-        # realistic reduction energy; adding a standing-loss term would double-count and
-        # break that validation. The standing-loss correction is applied only to the routes
-        # that lack an independent energy anchor (carbothermal, MRE, molten-salt).
+        "heating": _thermal(draw, S.heating_kwh(feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t)),
+        "reaction": _thermal(draw, S.reaction_enthalpy_kwh(draw(P.REACTION_ENTHALPY_H2_REDUCTION))),
+        # Standing loss is charged SYMMETRICALLY, like every other hot route. The route is
+        # built bottom-up (excavation + heating + reaction + electrolysis + liquefaction);
+        # its LOSS-FREE total matches Leger 2025's 24.3 kWh/kg LOX, which suggests Leger's
+        # full-chain figure also omits a continuous standing loss. So rather than exempting
+        # H2 (the old, inconsistent treatment), we charge it the shared REACTOR_STANDING_LOSS
+        # in the headline and validate against Leger on the loss-free path
+        # (Draw(..., exclude_standing_loss=True)). See _standing_loss and test_validation.
+        "reactor_loss": _thermal(draw, _standing_loss(draw, P.REACTOR_STANDING_LOSS)),
         # H2 is recycled internally (FeTiO3 + H2 -> Fe + TiO2 + H2O; the water is split,
         # H2 returns to the reduction loop). This stage is the electrolysis energy to
         # liberate the O2; the route is LOX-only (no net H2 product).
@@ -72,9 +105,9 @@ def carbothermal(draw) -> RouteResult:
     e2t = draw(P.ELECTRIC_TO_THERMAL_EFF)
     b = {
         "excavation": S.excavation_kwh(feed, draw(P.EXCAVATION_KWH_PER_KG_REGOLITH)),
-        "heating": S.heating_kwh(feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t),
-        "reaction": S.reaction_enthalpy_kwh(draw(P.REACTION_ENTHALPY_CARBOTHERMAL)),
-        "reactor_loss": draw(P.REACTOR_STANDING_LOSS),
+        "heating": _thermal(draw, S.heating_kwh(feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t)),
+        "reaction": _thermal(draw, S.reaction_enthalpy_kwh(draw(P.REACTION_ENTHALPY_CARBOTHERMAL))),
+        "reactor_loss": _thermal(draw, _standing_loss(draw, P.REACTOR_STANDING_LOSS)),
         # In the CH4-recycle flowsheet the liberated O ends up in water (methanation +
         # reforming loop) which is electrolyzed; H2/CH4 are recycled, O2 is the product.
         "water_electrolysis": S.water_electrolysis_kwh(draw(P.ELECTROLYSIS_EFFICIENCY)),
@@ -92,11 +125,11 @@ def molten_regolith_electrolysis(draw) -> RouteResult:
     e2t = draw(P.ELECTRIC_TO_THERMAL_EFF)
     b = {
         "excavation": S.excavation_kwh(feed, draw(P.EXCAVATION_KWH_PER_KG_REGOLITH)),
-        "heating": S.heating_kwh(
+        "heating": _thermal(draw, S.heating_kwh(
             feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t,
             fusion_kj_per_kg=draw(P.FUSION_REGOLITH), melt_fraction=1.0,
-        ),
-        "reactor_loss": draw(P.REACTOR_STANDING_LOSS),
+        )),
+        "reactor_loss": _thermal(draw, _standing_loss(draw, P.REACTOR_STANDING_LOSS)),
         "faradaic": S.faradaic_kwh(*S.coupled_voltage_efficiency(
             draw, P.V_CELL_MRE, P.CURRENT_EFFICIENCY_OXIDE, "severity_mre")),
         "cleanup": draw(P.CLEANUP_KWH_PER_KG_O2),
@@ -114,8 +147,8 @@ def molten_salt_electrolysis(draw) -> RouteResult:
     b = {
         "excavation": S.excavation_kwh(feed, draw(P.EXCAVATION_KWH_PER_KG_REGOLITH)),
         # No regolith fusion: FFC operates below the regolith melting point.
-        "heating": S.heating_kwh(feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t),
-        "reactor_loss": draw(P.REACTOR_STANDING_LOSS),
+        "heating": _thermal(draw, S.heating_kwh(feed, draw(P.CP_REGOLITH), dT, draw(P.RECUP_REGOLITH), e2t)),
+        "reactor_loss": _thermal(draw, _standing_loss(draw, P.REACTOR_STANDING_LOSS)),
         "faradaic": S.faradaic_kwh(*S.coupled_voltage_efficiency(
             draw, P.V_CELL_MOLTEN_SALT, P.CURRENT_EFFICIENCY_SALT, "severity_molten_salt")),
         "cleanup": draw(P.CLEANUP_KWH_PER_KG_O2),
@@ -130,13 +163,26 @@ def molten_salt_electrolysis(draw) -> RouteResult:
 # ---------------------------------------------------------------------------
 
 def water_mining(draw) -> RouteResult:
-    """E. PSR water mining + electrolysis -> LOX + LH2 (the only full-propellant route)."""
+    """E. PSR water mining + electrolysis -> LOX + LH2 (the only full-propellant route).
+
+    Charged symmetrically with the hot routes: imperfect vapor capture (CAPTURE_EFFICIENCY),
+    cryogenic excavation of ice-cemented regolith (ICY_EXCAVATION_SPECIFIC_ENERGY), a PSR
+    environmental standing loss (PSR_STANDING_LOSS), and the ice-side thermal chain (ice
+    sensible heat + captured-water reconditioning). It keeps the corrections that run in the
+    water route's favor: cryo-range regolith cp (CP_REGOLITH_CRYO, not the hot-route mean).
+    """
+    cap = draw(P.CAPTURE_EFFICIENCY)
     dT = draw(P.T_SUBLIMATION) - draw(P.T_FEED_PSR)
     e2t = draw(P.ELECTRIC_TO_THERMAL_EFF)
+    # Dry-regolith throughput per kg O2 (already includes the 1/capture-efficiency factor).
+    regolith = S.water_regolith_per_kg_o2(draw(P.ICE_GRADE), cap)
     b = {
+        "excavation": S.excavation_kwh(regolith, draw(P.ICY_EXCAVATION_SPECIFIC_ENERGY) / C.KJ_PER_KWH),
         "thermal_mining": S.thermal_mining_kwh(
-            draw(P.ICE_GRADE), draw(P.CP_REGOLITH), dT, draw(P.RECUP_PSR), e2t,
+            draw(P.ICE_GRADE), draw(P.CP_REGOLITH_CRYO), draw(P.CP_ICE), dT, draw(P.RECUP_PSR), e2t, cap,
         ),
+        "psr_standing_loss": _standing_loss(draw, P.PSR_STANDING_LOSS),
+        "reconditioning": draw(P.WATER_RECONDITIONING),
         "water_electrolysis": S.water_electrolysis_kwh(draw(P.ELECTROLYSIS_EFFICIENCY)),
         "cleanup": draw(P.CLEANUP_KWH_PER_KG_O2),
         "compression": draw(P.COMPRESSION_KWH_PER_KG_O2),
