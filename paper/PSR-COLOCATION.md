@@ -4,7 +4,7 @@
 low-grade waste-heat-offset paper. Its claims stand on their own and should be evaluated
 independently.**
 
-Version 0.1 (2026-05-30). This paper argues a *siting* thesis; the quantitative
+Version 0.2 (2026-07-01). This paper argues a *siting* thesis; the quantitative
 energy-offset kernel it leans on is the companion `WASTE-HEAT-OFFSET.md`. Where that
 paper makes a narrow, Second-Law-safe claim, this one makes a broader systems argument
 that carries more assumptions, called out explicitly.
@@ -37,12 +37,14 @@ siting advantage for compute, independent of ISRU.
 ## Claim 2: The waste heat then lands exactly where ISRU needs low-grade heat
 
 Per the companion paper, the only ISRU heat demand a ~315-350 K waste stream can serve is
-the PSR water route's sublimation chain (~273 K target), and it serves all of it (~2.1
-kWh/kg O2, ~14% of the route). Because the resource is *in the PSR*, co-location removes
-the transport problem that would otherwise kill the idea: the heat source, the low-grade
-sink (icy regolith), and the final cold sink (PSR sky) are all in the same place. A
-~12 kW compute load covers a 50 t/yr water plant; a 100 kW facility saturates ~420 t/yr.
-The cascade is: compute silicon → coolant loop → ice sublimation → residual to radiators.
+the PSR water route's sublimation chain (~273 K target), and it serves all of it (~1.8
+kWh/kg O2 after the exchanger pinch and effectiveness, ~11% of the route). Because the
+resource is *in the PSR*, co-location removes the transport problem that would otherwise
+kill the idea: the heat source, the low-grade sink (icy regolith), and the final cold sink
+(PSR sky) are all in the same place. A ~12 kW compute load covers a 50 t/yr water plant;
+on energy grounds a 100 kW facility could serve ~500 t/yr, though delivering heat into a
+granular icy bed is conduction-limited, so that is an upper bound, not a design. The
+cascade is: compute silicon → coolant loop → ice sublimation → residual to radiators.
 
 ## Claim 3: Co-location amortizes the power-into-shadow problem
 
@@ -60,39 +62,46 @@ The two benefits are distinct and should not be summed; conflating them oversell
 cascade (`python -m lpem --benefit`, reference: a 50 t/yr PSR water plant + co-located
 compute):
 
-- **Cascade benefit** (reuse compute heat in ISRU): saves ~**2.7 t** of landed reactor
+- **Cascade benefit** (reuse compute heat in ISRU): saves ~**2.3 t** of landed reactor
   mass (the low-grade heat offset, avoided fission power), against ~**1 t** of
   heat-integration hardware (exchanger, transport loop, dust mitigation).
 - **Siting benefit** (put the compute in the PSR for its cold sink): saves radiator mass,
   scale-dependent. Under an explicit radiator energy balance (IR emission minus absorbed
-  solar minus environmental IR, not a lumped "effective sink temperature"), a PSR saves,
-  over the feasible sampled cases, a median **~29 t of radiator per MW of compute** (IQR
-  ~18-49 t/MW). More striking than the median: in **~30% of sampled conditions a sunlit
-  radiator at 330 K cannot reject at all** without a colder radiator or active cooling, an
-  extreme form of the same PSR advantage that we report as a feasibility fraction rather
-  than fold into a point estimate. At real data-center scale this dwarfs the cascade and is
-  the actual driver of co-location. It is a *siting* benefit, not a cascade benefit: a PSR
+  solar minus environmental IR, with a sky view factor for a competently oriented vertical
+  two-sided panel, F_sky nominal 0.5), a PSR saves, over the feasible sampled cases, a
+  median **~10 t of radiator per MW of compute** (IQR ~7-16 t/MW). An earlier version of
+  this paper reported ~29 t/MW and claimed ~30% of sunlit designs could not reject at all;
+  both figures were artifacts of implicitly modeling a horizontal panel staring at warm
+  terrain with zero sky view. With realistic vertical-panel geometry, only ~0.1% of
+  sampled sunlit designs truly cannot reject at 330 K (net flux non-positive at any area)
+  and a further ~0.4% can reject only with a prohibitive area (more than 10x the PSR
+  panel); the corrected advantage is the ~10 t/MW mass saving, not widespread sunlit
+  infeasibility. At data-center scale this still exceeds the cascade and remains the
+  actual driver of co-location. It is a *siting* benefit, not a cascade benefit: a PSR
   already offers a cheap radiative sink, so the cascade itself does not save radiator mass.
   (Model: `src/lpem/benefit.py`, `net_rejection_wm2`; parameters, emissivity, radiator
-  temperature, absorbed solar, environmental IR, are explicit and tunable.)
+  temperature, absorbed solar, environmental IR, sky view factor, are explicit and
+  tunable.)
 
 **Estimating the probability of the benefit.** Rather than assert subjective probabilities
 (P that lunar-surface compute exists, etc.), we compute the **break-even joint
 probability** the enabling chain must clear for the cascade hardware to pay for itself:
-P* = cost / benefit, ~**38%** at nominal but ~**47%** once propagated (the ratio is
+P* = cost / benefit, ~**44%** at nominal and ~**50%** once propagated (the ratio is
 right-skewed, so the nominal under-reports it). Two readings follow:
 
 - *Conditional on co-location already happening* (compute and a water plant both sited at
-  the PSR for their own reasons), the cascade is worthwhile in ~**85%** of trials (the
-  integration probability clears the propagated break-even), so it is a low-risk,
-  positive-expected-value add-on. **Design it in.**
+  the PSR for their own reasons), the cascade is worthwhile in ~**78%** of trials (the
+  integration probability clears the propagated break-even), so it is a favorable,
+  positive-expected-value add-on, though a closer call than the earlier ~85% estimate
+  (the cascade prize shrank once the offset model gained a pinch and effectiveness).
+  **Design it in.**
 - *As a standalone speculative bet*, the full enabling chain (surface compute exists,
   co-located, water route pursued, integration works) under wide illustrative priors is
   only ~9%, well below the break-even, so its expected value is negative (~-0.8 t). **Do
   not justify co-location by the cascade alone.**
 
 The decision structure is therefore clear: **co-location is justified (if at all) by the
-compute siting economics (tens of tonnes per MW of radiator mass and shared
+compute siting economics (roughly ten tonnes per MW of radiator mass and shared
 power-into-shadow infrastructure) and the ISRU heat cascade is a cheap, sensible bonus to
 capture once you are already there, not a reason to go.** The break-even model
 (`src/lpem/benefit.py`) makes every assumption explicit and tunable.
@@ -113,7 +122,7 @@ skeptic should press:
 - **Heat transport over the last tens of meters** (racks to the working face) still costs
   mass and pumping power, and the regolith-side heat exchanger operates in abrasive dust
   at cryogenic temperatures with no flight heritage.
-- **The energy prize is modest** (~14% of one route); the real argument is shared
+- **The energy prize is modest** (~11% of one route); the real argument is shared
   infrastructure and a free, ideally-located heat sink, not a large kWh saving.
 - **Dust on radiators** in a worked mining environment degrades the very rejection
   advantage Claim 1 depends on.

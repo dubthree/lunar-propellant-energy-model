@@ -112,20 +112,28 @@ def _route_label(key: str) -> str:
 
 
 def fig_radiator() -> tuple[Path, float]:
-    """Radiator mass saved (t) by PSR siting vs sunlit equator across compute scale."""
-    eps = 0.85
-    t_rad = 330.0
-    t_env_psr = 70.0
-    t_env_eq = 300.0
-    solar_eq = 70.0
-    areal_mass = 7.0  # kg/m^2
+    """Radiator mass saved (t) by PSR siting vs sunlit equator across compute scale.
+
+    Uses the benefit module's nominal parameters, including the vertical two-sided panel
+    sky view factor F_sky (a competently oriented deployable panel, not a horizontal plate
+    lying on warm terrain). The F_sky=0 horizontal-plate limit is what over-stated the
+    earlier slope (~51 t/MW); the vertical geometry gives a much smaller, honest saving.
+    """
+    b = lpem.benefit
+    eps = b.RADIATOR_EMISSIVITY.nominal
+    t_rad = b.T_REJECT_K.nominal
+    t_env_psr = b.T_ENV_PSR_K.nominal
+    t_env_eq = b.T_ENV_EQ_K.nominal
+    solar_eq = b.ABSORBED_SOLAR_EQ_WM2.nominal
+    areal_mass = b.RADIATOR_AREAL_MASS.nominal  # kg/m^2
+    f_sky = b.F_SKY.nominal
 
     mw = np.linspace(0.01, 2.0, 200)
     saved_t = np.empty_like(mw)
     for i, scale in enumerate(mw):
         power_kw = scale * 1000.0
-        a_eq = lpem.benefit.radiator_area_m2(power_kw, t_rad, t_env_eq, eps, solar_eq)
-        a_psr = lpem.benefit.radiator_area_m2(power_kw, t_rad, t_env_psr, eps, 0.0)
+        a_eq = b.radiator_area_m2(power_kw, t_rad, t_env_eq, eps, solar_eq, f_sky)
+        a_psr = b.radiator_area_m2(power_kw, t_rad, t_env_psr, eps, 0.0, f_sky)
         saved_t[i] = max(0.0, a_eq - a_psr) * areal_mass / 1000.0
 
     slope = saved_t[-1] / mw[-1]  # t per MW (linear through origin)

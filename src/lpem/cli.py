@@ -14,7 +14,7 @@ from .model import compare, evaluate_all
 from .routes import ROUTES
 from .sensitivity import tornado
 from .sobol import sobol
-from .waste_heat import heat_balance, offset_summary
+from .waste_heat import heat_balance, offset_summary, supportable_caveat_lines
 from .benefit import estimate as estimate_benefit
 
 
@@ -201,6 +201,7 @@ def _format_waste_heat(t_reject: float, compute_kw: float, o2_t: float) -> str:
                  f"reactor mass saved {hb.reactor_mass_saved_t:.1f} t")
     lines.append(f"    that compute load alone could supply low-grade heat for "
                  f"{hb.o2_supportable_kg_yr/1000:.0f} t O2/yr")
+    lines += supportable_caveat_lines(hb)
     return "\n".join(lines)
 
 
@@ -215,9 +216,12 @@ def _format_benefit() -> str:
         f"P(worthwhile | co-located) = {r.prob_cascade_worthwhile_if_colocated:.0%}",
         f"  Siting (PSR cold sink for compute): radiator saved per MW (feasible cases) "
         f"median {r.radiator_saved_t_per_mw_median_feasible:.0f} t, IQR "
-        f"{r.radiator_saved_t_per_mw_p25_feasible:.0f}-{r.radiator_saved_t_per_mw_p75_feasible:.0f}; "
-        f"a sunlit 330 K panel cannot reject in {r.frac_equatorial_infeasible:.0%} of sampled "
-        "conditions -- the larger prize and the real driver of co-location",
+        f"{r.radiator_saved_t_per_mw_p25_feasible:.0f}-{r.radiator_saved_t_per_mw_p75_feasible:.0f} "
+        "(the larger prize and the real driver of co-location)",
+        f"    of sampled sunlit vertical panels: {r.frac_equatorial_cannot_reject:.1%} truly "
+        "cannot reject (net q <= 0, no finite area works),",
+        f"    and {r.frac_equatorial_area_capped:.1%} can reject but need a prohibitive area "
+        "(> 10x the PSR area); the rest reject feasibly",
         f"  Standalone speculative view: full enabling chain ~{r.expected_joint_probability:.0%} "
         f"(illustrative) < P*, so E[cascade net] = {r.expected_cascade_net_t:.2f} t "
         "(not worth it unless co-location already happens for other reasons)",

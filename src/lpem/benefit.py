@@ -27,6 +27,7 @@ from .params import Param
 from .waste_heat import offsettable_kwh_per_kg_o2
 
 SIGMA = 5.670374e-8  # Stefan-Boltzmann, W/m^2/K^4
+T_SKY_K = 3.0        # deep-space background seen through the panel's sky view (K); negligible
 
 # --- Compute / radiator parameters ---
 COMPUTE_KW = Param(12.0, 5.0, 50.0, "co-located surface compute load (kW); reference case")
@@ -35,16 +36,24 @@ RADIATOR_EMISSIVITY = Param(0.85, 0.78, 0.92, "radiator IR emissivity (OSR/secon
 RADIATOR_AREAL_MASS = Param(7.0, 4.0, 12.0, "deployable radiator areal mass, kg/m^2")
 
 # Explicit radiator energy balance (replaces the opaque 'effective sink temperature').
-# Net rejection per m^2 = eps*sigma*(T_rad^4 - T_env^4) - absorbed_solar. The two sites
-# differ in the environmental IR temperature the radiator exchanges with, and in the
-# absorbed solar flux:
-# - PSR: permanent shadow (zero solar) and a cryogenic ~40-110 K terrain/sky.
-# - Sunlit equator: warm terrain IR (~250-350 K seen by a vertical/oriented panel) plus
-#   absorbed solar even for a sun-avoiding OSR coating (alpha~0.1 of the 1361 W/m^2
-#   constant times a geometric incidence factor); the band spans good vs poor orientation.
-T_ENV_PSR_K = Param(70.0, 40.0, 110.0, "PSR terrain/sky IR temperature")
-T_ENV_EQ_K = Param(300.0, 250.0, 350.0, "equatorial terrain IR seen by an oriented panel")
-ABSORBED_SOLAR_EQ_WM2 = Param(70.0, 25.0, 160.0, "absorbed solar on an oriented sunlit radiator (alpha*S*f)")
+# A deployable lunar radiator is a VERTICAL, two-sided panel, not a horizontal plate lying
+# on the ground: each face therefore sees roughly half cold sky (the 3 K deep-space
+# background) and half surrounding terrain. We model that with a sky view factor F_sky:
+#   net rejection per m^2 = eps*sigma*(T_rad^4 - [F_sky*T_sky^4 + (1-F_sky)*T_env^4]) - absorbed_solar
+# The old horizontal-plate model (unity view to warm terrain, zero sky view) is the F_sky=0
+# limit, and is what over-stated the sunlit case (a large "cannot reject" fraction). The two
+# sites differ in terrain IR temperature and in absorbed solar flux:
+# - PSR: permanent shadow (zero solar) and a cryogenic ~40-110 K terrain; the sky view only
+#   makes it colder still.
+# - Sunlit equator: warm terrain IR (~250-350 K) behind the (1-F_sky) fraction, plus absorbed
+#   solar. A competently oriented vertical panel is held edge-on to a low sun, so it absorbs
+#   far LESS than a horizontal noon plate (which would take alpha*S ~ 0.1*1361 ~ 136 W/m^2 at
+#   normal incidence); the ABSORBED_SOLAR band below is alpha*S times a small vertical-panel
+#   incidence factor, consistent with the same edge-on geometry that gives the ~0.5 sky view.
+F_SKY = Param(0.5, 0.2, 0.65, "cold-sky view factor of a vertical two-sided panel (F_sky=0 = horizontal plate)")
+T_ENV_PSR_K = Param(70.0, 40.0, 110.0, "PSR terrain IR temperature")
+T_ENV_EQ_K = Param(300.0, 250.0, 350.0, "equatorial terrain IR behind the non-sky fraction")
+ABSORBED_SOLAR_EQ_WM2 = Param(55.0, 20.0, 110.0, "absorbed solar on a vertical edge-on sunlit panel (alpha*S*f_incidence)")
 
 # --- Heat-integration cost (the thing you must build to capture the benefit) ---
 INTEGRATION_MASS_T = Param(1.0, 0.4, 2.5, "heat exchanger + transport loop + dust mitigation, t")
@@ -62,17 +71,23 @@ P_WATER_ROUTE = Param(0.55, 0.25, 0.85, "PSR water mining pursued (vs regolith-o
 P_INTEGRATION_WORKS = Param(0.75, 0.50, 0.95, "heat transport/integration engineered | co-located")
 
 
-def net_rejection_wm2(t_rad: float, t_env: float, emissivity: float, absorbed_solar_wm2: float) -> float:
-    """Net heat a radiator panel rejects per m^2: IR emission minus environmental IR
-    minus absorbed solar. Can be <= 0 if the environment is too hot / sunlit to reject at
-    this radiator temperature (then the panel cannot reject there without active cooling)."""
-    return emissivity * SIGMA * (t_rad**4 - t_env**4) - absorbed_solar_wm2
+def net_rejection_wm2(t_rad: float, t_env: float, emissivity: float, absorbed_solar_wm2: float,
+                      f_sky: float = 0.0, t_sky: float = T_SKY_K) -> float:
+    """Net heat a radiator panel rejects per m^2: IR emission minus absorbed environmental
+    IR minus absorbed solar. The environment is a view-factor blend of cold sky (fraction
+    f_sky, at t_sky) and terrain (the remaining 1-f_sky, at t_env), so a vertical two-sided
+    panel that sees ~half sky rejects far better than the f_sky=0 horizontal-plate limit.
+    Can be <= 0 if the environment is too hot / sunlit to reject at this radiator temperature
+    (then the panel cannot reject there without active cooling)."""
+    t_env_eff4 = f_sky * t_sky**4 + (1.0 - f_sky) * t_env**4
+    return emissivity * SIGMA * (t_rad**4 - t_env_eff4) - absorbed_solar_wm2
 
 
 def radiator_area_m2(power_kw: float, t_rad: float, t_env: float,
-                     emissivity: float, absorbed_solar_wm2: float = 0.0) -> float:
+                     emissivity: float, absorbed_solar_wm2: float = 0.0,
+                     f_sky: float = 0.0) -> float:
     """Radiator area to reject `power_kw` under an explicit energy balance."""
-    q = net_rejection_wm2(t_rad, t_env, emissivity, absorbed_solar_wm2)
+    q = net_rejection_wm2(t_rad, t_env, emissivity, absorbed_solar_wm2, f_sky)
     if q <= 0:
         return float("inf")  # cannot reject at this temperature in this environment
     return (power_kw * 1000.0) / q
@@ -89,14 +104,19 @@ class BenefitResult:
     prob_cascade_worthwhile_if_colocated: float  # P( P_integration > P* ) propagating both
     # The separate SITING benefit (put compute in a PSR for its cold sink), scale-dependent.
     # Per-MW radiator mass saved. Reported over FEASIBLE samples only (median + IQR), with
-    # the infeasibility fraction as a separate headline statistic; mean/p95 are NOT reported
-    # because they are dominated by the area-cap, not physics.
+    # the two infeasibility fractions as separate headline statistics; mean/p95 are NOT
+    # reported because they are dominated by the area-cap, not physics.
     radiator_saved_t_per_mw_nominal: float
     radiator_saved_t_per_mw_median_feasible: float
     radiator_saved_t_per_mw_p25_feasible: float
     radiator_saved_t_per_mw_p75_feasible: float
-    frac_equatorial_infeasible: float   # fraction of sampled conditions where a sunlit
-                                        # radiator at T_rad cannot reject (cap binds / q<=0)
+    # Split feasibility (the old code conflated these into one 'infeasible' flag, which the
+    # paper then mis-worded as "cannot reject at all"). A panel that truly cannot reject
+    # (q <= 0) is physically different from one that can reject but would need a prohibitive
+    # area (hits the 10x cap). Report both; do NOT word the area cap as "cannot reject".
+    frac_equatorial_cannot_reject: float   # q <= 0: no finite area rejects the load
+    frac_equatorial_area_capped: float     # q > 0 but required area exceeds the 10x cap
+    frac_equatorial_infeasible: float      # backward-compat alias: cannot_reject + area_capped
     # The speculative UNCONDITIONAL view (full enabling chain, illustrative priors):
     expected_joint_probability: float
     expected_cascade_net_t: float       # E[chain] * cascade_benefit - cost
@@ -109,22 +129,29 @@ def _nominal(p: Param) -> float:
 _A_EQ_CAP_MULT = 10.0  # cap the equatorial radiator area at this multiple of the PSR area
 
 
-def _radiator_saved_t_per_mw(eps, t_rad, t_env_eq, solar_eq, t_env_psr, areal_mass):
-    """Radiator mass saved (t) per MW by PSR siting, and whether the sunlit panel is feasible.
+def _radiator_saved_t_per_mw(eps, t_rad, t_env_eq, solar_eq, t_env_psr, areal_mass, f_sky):
+    """Radiator mass saved (t) per MW by PSR siting, and the feasibility of the sunlit panel.
 
-    Returns (saved_t_per_mw, feasible). As a sunlit panel nears its rejection limit its
-    area diverges hyperbolically (1/q), so we cap a_eq at a fixed multiple of the PSR area
-    for ALL cases (not only the q<=0 branch); without this the saving is dominated by a
-    near-singular denominator and the upper percentiles become numerical artifacts. When the
-    cap binds (or the panel cannot reject at all) the case is flagged infeasible, and such
-    cases should be summarized by the feasibility fraction, not folded into a point estimate.
+    Returns (saved_t_per_mw, feasible, cannot_reject, area_capped). The two failure modes are
+    reported separately (the old code lumped them into one 'infeasible' flag):
+      - cannot_reject: net rejection q <= 0, so NO finite area rejects the load there.
+      - area_capped:   q > 0 (it CAN reject) but the required area exceeds a fixed multiple
+                       of the PSR area. As a sunlit panel nears its rejection limit its area
+                       diverges hyperbolically (1/q), so we cap a_eq to keep the upper
+                       percentiles from becoming near-singular numerical artifacts; a capped
+                       case can still reject, it is just area-prohibitive.
+    Only feasible cases (q > 0 and under the cap) carry a meaningful saving and are folded
+    into the reported band; the two failure fractions are summarized on their own.
     """
-    a_eq = radiator_area_m2(1000.0, t_rad, t_env_eq, eps, solar_eq)
-    a_psr = radiator_area_m2(1000.0, t_rad, t_env_psr, eps, 0.0)
+    q_eq = net_rejection_wm2(t_rad, t_env_eq, eps, solar_eq, f_sky)
+    a_psr = radiator_area_m2(1000.0, t_rad, t_env_psr, eps, 0.0, f_sky)
+    if q_eq <= 0.0:
+        return 0.0, False, True, False
+    a_eq = (1000.0 * 1000.0) / q_eq
     cap = a_psr * _A_EQ_CAP_MULT
-    feasible = a_eq <= cap  # finite and below the cap
-    a_eq = min(a_eq, cap)
-    return max(0.0, a_eq - a_psr) * areal_mass / 1000.0, feasible
+    if a_eq > cap:
+        return max(0.0, cap - a_psr) * areal_mass / 1000.0, False, False, True
+    return max(0.0, a_eq - a_psr) * areal_mass / 1000.0, True, False, False
 
 
 def estimate(n: int = 20000, seed: int = 12345) -> BenefitResult:
@@ -164,21 +191,26 @@ def estimate(n: int = 20000, seed: int = 12345) -> BenefitResult:
         worthwhile[i] = P_INTEGRATION_WORKS.sample(rng) > pstar
 
     # 2. Siting benefit: radiator mass saved per MW; feasible-only robust stats.
-    rad_nominal, _ = _radiator_saved_t_per_mw(
+    rad_nominal, _, _, _ = _radiator_saved_t_per_mw(
         _nominal(RADIATOR_EMISSIVITY), _nominal(T_REJECT_K), _nominal(T_ENV_EQ_K),
         _nominal(ABSORBED_SOLAR_EQ_WM2), _nominal(T_ENV_PSR_K), _nominal(RADIATOR_AREAL_MASS),
+        _nominal(F_SKY),
     )
     rad_feasible = []
-    infeasible = 0
+    cannot_reject = 0
+    area_capped = 0
     for i in range(n):
-        saved, feas = _radiator_saved_t_per_mw(
+        saved, feas, cant, capped = _radiator_saved_t_per_mw(
             RADIATOR_EMISSIVITY.sample(rng), T_REJECT_K.sample(rng), T_ENV_EQ_K.sample(rng),
             ABSORBED_SOLAR_EQ_WM2.sample(rng), T_ENV_PSR_K.sample(rng), RADIATOR_AREAL_MASS.sample(rng),
+            F_SKY.sample(rng),
         )
         if feas:
             rad_feasible.append(saved)
+        elif cant:
+            cannot_reject += 1
         else:
-            infeasible += 1
+            area_capped += 1
     rad_feasible = np.array(rad_feasible) if rad_feasible else np.array([rad_nominal])
 
     # 3. Unconditional speculative view: full enabling chain (illustrative priors).
@@ -198,7 +230,9 @@ def estimate(n: int = 20000, seed: int = 12345) -> BenefitResult:
         radiator_saved_t_per_mw_median_feasible=float(np.percentile(rad_feasible, 50)),
         radiator_saved_t_per_mw_p25_feasible=float(np.percentile(rad_feasible, 25)),
         radiator_saved_t_per_mw_p75_feasible=float(np.percentile(rad_feasible, 75)),
-        frac_equatorial_infeasible=infeasible / n,
+        frac_equatorial_cannot_reject=cannot_reject / n,
+        frac_equatorial_area_capped=area_capped / n,
+        frac_equatorial_infeasible=(cannot_reject + area_capped) / n,
         expected_joint_probability=expected_joint,
         expected_cascade_net_t=expected_joint * cascade_benefit - cost,
     )
